@@ -147,3 +147,25 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Cloudflare Wrangler
+.wrangler/
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.uv/
+*.egg-info/
+dist/
+build/
+uv.lock
+uv.toml
+
+# Operating System
+.DS_Store
+Thumbs.db
+

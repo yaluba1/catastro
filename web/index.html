@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <meta name="description" content="Visor de Catastro de Yaluba: consulta datos físicos, superficies, cultivos, cartografía y ubicación en Google Maps a partir de referencias catastrales en España.">
+  <meta name="theme-color" content="#7DA92E" id="meta-theme-color">
+  <title>Visor de Catastro | Yaluba</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="img/yaluba_logo_sml.png">
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Leaflet CSS (Local) -->
+  <link rel="stylesheet" href="css/leaflet.css">
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Header principal -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-group">
+        <a href="#" class="brand-logo-link" title="Yaluba - Visor de Catastro">
+          <img src="img/yaluba_logo.png" alt="Yaluba Logo" class="brand-logo" width="150" height="40">
+        </a>
+        <div class="brand-divider" aria-hidden="true"></div>
+        <div class="brand-text">
+          <h1 class="brand-title">Visor de Catastro</h1>
+          <span class="brand-badge">Sede Electrónica Oficial</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Switch de modo oscuro/claro -->
+        <button id="theme-toggle" class="theme-toggle-btn" aria-label="Cambiar a modo oscuro" title="Cambiar tema claro/oscuro">
+          <svg class="theme-icon icon-sun" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2"></path>
+            <path d="M12 20v2"></path>
+            <path d="m4.93 4.93 1.41 1.41"></path>
+            <path d="m17.66 17.66 1.41 1.41"></path>
+            <path d="M2 12h2"></path>
+            <path d="M20 12h2"></path>
+            <path d="m6.34 17.66-1.41 1.41"></path>
+            <path d="m19.07 4.93-1.41 1.41"></path>
+          </svg>
+          <svg class="theme-icon icon-moon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+          </svg>
+          <span class="theme-toggle-text" id="theme-text">Modo Oscuro</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal -->
+  <main class="main-content">
+    <div class="content-wrapper">
+
+      <!-- Sección de Búsqueda Inteligente -->
+      <section class="search-section" aria-label="Búsqueda de Referencia Catastral o Coordenadas">
+        <div class="search-card">
+          <div class="search-header">
+            <h2 class="search-headline">Consulta de Inmuebles, Parcelas y Ubicación</h2>
+            <p class="search-subhead">Introduce una referencia catastral (14 o 20 caracteres), coordenadas GPS (lat, lon) o haz clic en cualquier parcela del visor inferior.</p>
+          </div>
+
+          <form id="search-form" class="search-form" autocomplete="off">
+            <div class="input-wrapper">
+              <span class="input-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+              </span>
+              <input 
+                type="text" 
+                id="rc-input" 
+                class="rc-input" 
+                placeholder="Referencia (ej: 40204A006000510000JM) o GPS (ej: 40.4166, -3.7038)" 
+                maxlength="65"
+                spellcheck="false"
+                autocapitalize="characters"
+                required
+                aria-label="Referencia Catastral o Coordenadas GPS"
+              >
+              <button type="button" id="clear-btn" class="clear-btn" aria-label="Borrar texto" title="Borrar">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+              <button type="button" id="geo-btn" class="geo-btn" title="Obtener mi ubicación GPS actual" aria-label="Obtener mi ubicación GPS actual">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M12 2v3m0 14v3M2 12h3m14 0h3"></path>
+                </svg>
+                <span class="geo-btn-text">Mi ubicación</span>
+              </button>
+              <button type="submit" id="submit-btn" class="submit-btn">
+                <span class="btn-text">Consultar</span>
+                <span class="btn-spinner" aria-hidden="true"></span>
+              </button>
+            </div>
+            
+            <div class="input-footer">
+              <span id="char-counter" class="char-counter">0 caracteres</span>
+              <span id="format-hint" class="format-hint">Acepta Ref. Catastral o Coordenadas (lat, lon)</span>
+              <span class="map-hint-text">💡 Toca o haz clic en cualquier parcela en el visor</span>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Visor Cartográfico Interactivo Siempre Visible (Leaflet + PNOA + WMS Catastro) -->
+      <section id="map-section" class="map-card-section" aria-label="Visor Cartográfico Interactivo">
+        <div class="section-title-bar">
+          <div class="title-with-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+              <line x1="8" y1="2" x2="8" y2="18"></line>
+              <line x1="16" y1="6" x2="16" y2="22"></line>
+            </svg>
+            <h3>Visor Cartográfico Catastral</h3>
+          </div>
+          <div class="map-controls-legend">
+            <span class="legend-item"><span class="legend-color pnoa"></span> Ortofoto PNOA</span>
+            <span class="legend-item"><span class="legend-color parcel"></span> Linderos Catastro</span>
+          </div>
+        </div>
+
+        <div class="map-container-wrapper">
+          <div id="map-instruction-pill" class="map-floating-pill">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"></path>
+              <circle cx="12" cy="9" r="2.5"></circle>
+            </svg>
+            <span>Haz clic en cualquier parcela o tejado para ver sus datos</span>
+          </div>
+          <div id="map" class="map-element" role="region" aria-label="Mapa cartográfico del Catastro"></div>
+          <div class="map-hint-touch">Usa dos dedos para mover el mapa en móvil</div>
+        </div>
+
+        <div class="map-footer-coords">
+          <span class="coords-item">
+            <strong>Latitud:</strong> <span id="lat-val">40.41663</span>
+          </span>
+          <span class="coords-item">
+            <strong>Longitud:</strong> <span id="lon-val">-3.70381</span>
+          </span>
+          <span class="coords-item">
+            <strong>Sistema:</strong> WGS84 (EPSG:4326)
+          </span>
+          <button type="button" id="center-default-btn" class="map-subtle-btn" title="Centrar en Km 0 (Puerta del Sol, Madrid)">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <circle cx="12" cy="12" r="2"></circle>
+            </svg>
+            <span>Km 0 Sol</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Estado: Cargando Skeleton -->
+      <section id="loading-state" class="loading-state" style="display: none;" aria-live="polite">
+        <div class="skeleton-card hero-skeleton">
+          <div class="skeleton-line skeleton-badge"></div>
+          <div class="skeleton-line skeleton-title"></div>
+          <div class="skeleton-line skeleton-sub"></div>
+        </div>
+        <div class="skeleton-grid">
+          <div class="skeleton-card skeleton-box"></div>
+          <div class="skeleton-card skeleton-box"></div>
+          <div class="skeleton-card skeleton-box"></div>
+          <div class="skeleton-card skeleton-box"></div>
+        </div>
+        <div class="skeleton-card skeleton-map"></div>
+      </section>
+
+      <!-- Estado: Error -->
+      <section id="error-state" class="error-state" style="display: none;" role="alert">
+        <div class="error-card">
+          <div class="error-icon">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <div class="error-content">
+            <h3 class="error-title">No se pudo obtener la información</h3>
+            <p id="error-message" class="error-message">La referencia catastral indicada no se encuentra en la base de datos o el servicio del Catastro no responde.</p>
+            <div class="error-tips">
+              <strong>Sugerencias:</strong>
+              <ul>
+                <li>Verifica que la referencia tenga 14 o 20 caracteres alfanuméricos sin espacios.</li>
+                <li>Los inmuebles de País Vasco y Navarra cuentan con catastros forales propios y no figuran en la Dirección General del Catastro estatal.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Estado: Resultados del Inmueble -->
+      <section id="results-section" class="results-section" style="display: none;">
+        
+        <!-- Tarjeta Principal de Identidad -->
+        <article class="property-hero-card">
+          <div class="hero-header">
+            <div class="hero-badges">
+              <span id="class-badge" class="badge-class">Rústico</span>
+              <span id="use-badge" class="badge-use">Agrario</span>
+            </div>
+            <div class="hero-actions-top">
+              <button id="copy-summary-btn" class="action-btn-subtle" title="Copiar resumen de la ficha">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copiar Ficha</span>
+              </button>
+              <button id="print-btn" class="action-btn-subtle" title="Imprimir o guardar como PDF">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                  <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                <span>Imprimir / PDF</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="ref-container">
+            <span class="ref-label">Referencia Catastral</span>
+            <div class="ref-display-group">
+              <span id="result-rc" class="result-rc">40204A006000510000JM</span>
+              <button id="copy-rc-btn" class="copy-btn" title="Copiar referencia catastral" aria-label="Copiar referencia catastral">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="copy-tooltip">Copiado</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="address-container">
+            <span class="address-label">Localización</span>
+            <p id="result-address" class="result-address">Polígono 6 Parcela 51 CERCAS. SACRAMENIA (SEGOVIA)</p>
+            <div class="location-crumbs">
+              <span id="result-municipio" class="crumb-item">Sacramenia</span>
+              <span class="crumb-separator">•</span>
+              <span id="result-provincia" class="crumb-item">Segovia</span>
+            </div>
+          </div>
+
+          <!-- Resumen Inteligente / Descripción -->
+          <div class="ai-summary-card">
+            <div class="ai-summary-header">
+              <svg class="ai-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path>
+              </svg>
+              <span class="ai-title">Resumen Descriptivo del Inmueble</span>
+            </div>
+            <p id="result-summary" class="ai-summary-text">Cargando análisis descriptivo...</p>
+          </div>
+        </article>
+
+        <!-- Barra de Enlaces y Acciones Principales -->
+        <div class="action-cards-grid">
+          <a id="btn-google-maps" href="#" target="_blank" rel="noopener noreferrer" class="cta-action-card google-maps-card">
+            <div class="cta-icon-wrap maps-wrap">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon>
+                <line x1="9" y1="3" x2="9" y2="18"></line>
+                <line x1="15" y1="6" x2="15" y2="21"></line>
+              </svg>
+            </div>
+            <div class="cta-text-wrap">
+              <span class="cta-title">Abrir en Google Maps</span>
+              <span id="coords-text" class="cta-sub">Ver coordenadas y ruta de acceso</span>
+            </div>
+            <svg class="arrow-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="7" y1="17" x2="17" y2="7"></line>
+              <polyline points="7 7 17 7 17 17"></polyline>
+            </svg>
+          </a>
+
+          <a id="btn-sede-catastro" href="#" target="_blank" rel="noopener noreferrer" class="cta-action-card catastro-card">
+            <div class="cta-icon-wrap catastro-wrap">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </div>
+            <div class="cta-text-wrap">
+              <span class="cta-title">Ficha Oficial del Catastro</span>
+              <span class="cta-sub">Consultar en Sede Electrónica oficial</span>
+            </div>
+            <svg class="arrow-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="7" y1="17" x2="17" y2="7"></line>
+              <polyline points="7 7 17 7 17 17"></polyline>
+            </svg>
+          </a>
+        </div>
+
+        <!-- Selector de Unidades en División Horizontal (Pisos/Locales) -->
+        <div id="multi-units-card" class="multi-units-card" style="display: none;">
+          <div class="multi-units-header">
+            <div class="title-with-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
+                <path d="M9 22v-4h6v4"></path>
+                <path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"></path>
+              </svg>
+              <h3 id="multi-units-title">Inmuebles en este Edificio / Parcela</h3>
+            </div>
+            <span id="multi-units-badge" class="count-badge">0 inmuebles</span>
+          </div>
+          <p class="multi-units-sub">Esta parcela o edificio cuenta con varias fincas independientes registradas. Puedes elegir una vivienda o local concreto para cargar su ficha:</p>
+          <div class="multi-units-select-row">
+            <select id="multi-units-select" class="multi-units-select" aria-label="Seleccionar inmueble individual">
+              <!-- Se rellena dinámicamente con JavaScript -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Grid de Métricas Principales -->
+        <div class="metrics-grid">
+          <!-- Superficie -->
+          <div class="metric-card">
+            <div class="metric-icon-box pistachio">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+              </svg>
+            </div>
+            <div class="metric-info">
+              <span id="size-label" class="metric-label">Superficie Total</span>
+              <span id="result-size" class="metric-val">24.200 m²</span>
+              <span id="result-size-extra" class="metric-sub">2,42 ha</span>
+            </div>
+          </div>
+
+          <!-- Uso Principal -->
+          <div class="metric-card">
+            <div class="metric-icon-box pumpkin">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Uso Principal</span>
+              <span id="result-use" class="metric-val">Agrario</span>
+              <span id="result-class-text" class="metric-sub">Finca Rústica</span>
+            </div>
+          </div>
+
+          <!-- Año Construcción / Antigüedad -->
+          <div class="metric-card">
+            <div class="metric-icon-box blue">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Año de Construcción</span>
+              <span id="result-year" class="metric-val">-</span>
+              <span id="result-year-sub" class="metric-sub">Sin edificación declarada</span>
+            </div>
+          </div>
+
+          <!-- Coeficiente Participación -->
+          <div class="metric-card">
+            <div class="metric-icon-box purple">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="5" x2="5" y2="19"></line>
+                <circle cx="6.5" cy="6.5" r="2.5"></circle>
+                <circle cx="17.5" cy="17.5" r="2.5"></circle>
+              </svg>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Coeficiente Horizontal</span>
+              <span id="result-coef" class="metric-val">-</span>
+              <span id="result-coef-sub" class="metric-sub">División horizontal</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desglose de Cultivos (Rústico) o Elementos Construidos (Urbano) -->
+        <div id="details-section" class="details-section">
+          <div class="section-title-bar">
+            <div class="title-with-icon">
+              <svg id="details-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <h3 id="details-title">Desglose de Subparcelas y Cultivos</h3>
+            </div>
+            <span id="details-count-badge" class="count-badge">2 elementos</span>
+          </div>
+
+          <!-- Contenedor dinámico para tabla de subparcelas o construcciones -->
+          <div id="details-table-wrapper" class="table-responsive">
+            <!-- Se inyecta por JS -->
+          </div>
+        </div>
+
+        <!-- Sección de Cargas y Estado Registral (Colegio de Registradores) -->
+        <div class="charges-legal-card">
+          <div class="charges-header">
+            <div class="charges-icon-wrap">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+            </div>
+            <div>
+              <h3 class="charges-title">Cargas, Hipotecas y Estado Registral</h3>
+              <span class="charges-subtitle">Guía oficial para solicitar la Nota Simple en el Geoportal</span>
+            </div>
+          </div>
+
+          <div class="charges-body">
+            <p>
+              El <strong>Catastro Inmobiliario</strong> es únicamente un censo físico y fiscal; 
+              <strong>no contiene información sobre hipotecas, embargos, servidumbres ni deudas</strong>. 
+              Para comprobar la titularidad jurídica y las cargas reales, se solicita la <strong>Nota Simple</strong> en el <strong>Registro de la Propiedad</strong>.
+            </p>
+
+            <div class="charges-guide-box">
+              <h4 class="guide-title">Pasos rápidos para solicitarla en el Geoportal de Registradores:</h4>
+              
+              <div class="guide-steps-list">
+                <!-- Paso 1 -->
+                <div class="guide-step">
+                  <div class="step-num">1</div>
+                  <div class="step-content">
+                    <span class="step-name">Copia la Referencia Catastral</span>
+                    <p class="step-desc">La necesitarás para pegarla en el buscador del mapa en el Geoportal.</p>
+                    <button type="button" id="copy-rc-step-btn" class="step-action-btn">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                      <span id="copy-rc-step-text">Copiar Referencia Catastral</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Paso 2 -->
+                <div class="guide-step">
+                  <div class="step-num">2</div>
+                  <div class="step-content">
+                    <span class="step-name">Justificación de "Interés Legítimo"</span>
+                    <p class="step-desc">El Registro exige indicar el motivo de la consulta (no requiere un escrito notarial extenso, basta con seleccionar y copiar una justificación legal válida):</p>
+                    
+                    <div class="reason-selector-group">
+                      <select id="reason-select" class="reason-select" aria-label="Seleccionar motivo de interés legítimo">
+                        <option value="Investigación jurídica sobre el objeto, su titularidad o limitaciones previa a una posible adquisición o compraventa.">
+                          Investigación previa a posible compraventa / adquisición (Recomendado)
+                        </option>
+                        <option value="Interés legítimo en el arrendamiento o alquiler del inmueble.">
+                          Interés en arrendamiento o alquiler
+                        </option>
+                        <option value="Estudio de solvencia y concesión de financiación o préstamo con garantía inmobiliaria.">
+                          Estudio de financiación o crédito hipotecario
+                        </option>
+                        <option value="Comprobación de cargas, gravámenes o servidumbres por titular, heredero o colindante.">
+                          Comprobación por titular, heredero o colindante
+                        </option>
+                        <option value="Averiguación patrimonial para el ejercicio de acciones o reclamaciones judiciales.">
+                          Ejercicio de acciones o reclamaciones judiciales
+                        </option>
+                      </select>
+                      
+                      <button type="button" id="copy-reason-btn" class="step-action-btn copy-reason-btn">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span id="copy-reason-text">Copiar motivo seleccionado</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Paso 3 -->
+                <div class="guide-step">
+                  <div class="step-num">3</div>
+                  <div class="step-content">
+                    <span class="step-name">Abrir el Geoportal y solicitar la Nota</span>
+                    <p class="step-desc">Pega la referencia en el buscador del mapa, haz clic sobre la parcela localizada y pulsa en <em>"Solicitar Nota Simple"</em>.</p>
+                    <a id="btn-geoportal-direct" href="https://geoportal.registradores.org/geoportal" target="_blank" rel="noopener noreferrer" class="btn-charge-action btn-registradores">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                      </svg>
+                      <span>Abrir Geoportal de Registradores (Acceso directo a Nota Simple)</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p class="charges-disclaimer">
+              * El trámite de la Nota Simple se realiza y abona (arancel oficial: 9,02 € + IVA) directamente en la pasarela oficial del Colegio de Registradores de España. Yaluba no intermedia ni percibe comisiones.
+            </p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Historial de Consultas Recientes -->
+      <section id="history-section" class="history-section" style="display: none;">
+        <div class="section-title-bar">
+          <div class="title-with-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <h3>Búsquedas Recientes</h3>
+          </div>
+          <button id="clear-history-btn" class="clear-history-btn" title="Borrar historial local">Borrar historial</button>
+        </div>
+        <div id="history-list" class="history-chips-grid">
+          <!-- Se inyecta por JS -->
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <img src="img/yaluba_logo_sml.png" alt="Yaluba" class="footer-logo" width="120" height="32">
+        <p class="footer-desc">Solución de consulta y análisis territorial para el sector inmobiliario y agrario.</p>
+        <a href="https://github.com/yaluba1/catastro" target="_blank" rel="noopener noreferrer" class="footer-github-link" title="Ver código fuente en GitHub">
+          <img src="img/GitHub_logo.svg" alt="GitHub" class="github-logo logo-light" width="18" height="18">
+          <img src="img/GitHub_logo_white.svg" alt="GitHub" class="github-logo logo-dark" width="18" height="18">
+          <span>Código en GitHub</span>
+        </a>
+      </div>
+
+      <div class="footer-tips">
+        <span class="footer-tips-text">Invítame a un café</span>
+        <div class="footer-crypto-group">
+          <button type="button" class="crypto-btn" id="tip-btc-btn" title="Invítame a un café con Bitcoin" aria-label="Donar con Bitcoin">
+            <img src="img/bitcoin.svg" alt="Bitcoin" class="crypto-logo" width="22" height="22">
+          </button>
+          <button type="button" class="crypto-btn" id="tip-sol-btn" title="Invítame a un café con Solana" aria-label="Donar con Solana">
+            <img src="img/solana.svg" alt="Solana" class="crypto-logo" width="22" height="22">
+          </button>
+        </div>
+      </div>
+
+      <div class="footer-meta">
+        <p class="footer-sources">
+          Datos públicos proporcionados por la <strong>Dirección General del Catastro</strong> (Ministerio de Hacienda) e <strong>Instituto Geográfico Nacional</strong> (IGN).
+        </p>
+        <p class="footer-copy">© 2026 Yaluba. Todos los derechos reservados.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Modal de Donación Crypto (Invítame a un café) -->
+  <div id="crypto-modal" class="crypto-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="crypto-modal-title">
+    <div class="crypto-modal-backdrop" id="crypto-modal-backdrop"></div>
+    <div class="crypto-modal-card">
+      <div class="crypto-modal-header">
+        <div class="crypto-modal-title-wrap">
+          <img id="crypto-modal-icon" src="img/bitcoin.svg" alt="" class="crypto-modal-icon" width="24" height="24">
+          <h3 id="crypto-modal-title" class="crypto-modal-title">Bitcoin</h3>
+        </div>
+        <button id="crypto-modal-close" class="crypto-modal-close" aria-label="Cerrar modal">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="crypto-modal-body">
+        <div class="crypto-qr-container">
+          <img id="crypto-modal-qr" src="img/btc-qr.svg" alt="Código QR" class="crypto-qr-img" width="200" height="200">
+        </div>
+        <p class="crypto-tip-hint">Escanea el código QR desde tu app o wallet:</p>
+        
+        <div class="crypto-details-card">
+          <div class="crypto-detail-row">
+            <span class="crypto-detail-label">Dirección:</span>
+            <span id="crypto-modal-address" class="crypto-detail-value" title="Haz clic para copiar dirección"></span>
+          </div>
+          <div class="crypto-detail-row">
+            <span class="crypto-detail-label">URI / Enlace:</span>
+            <span id="crypto-modal-uri" class="crypto-detail-value" title="Haz clic para copiar URI"></span>
+          </div>
+        </div>
+
+        <div class="crypto-modal-actions">
+          <button id="crypto-copy-address-btn" class="crypto-copy-btn crypto-btn-primary" type="button">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span id="crypto-copy-address-text">Copiar Dirección</span>
+          </button>
+          <button id="crypto-copy-uri-btn" class="crypto-copy-btn crypto-btn-secondary" type="button">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+            <span id="crypto-copy-uri-text">Copiar URI</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS (Local) -->
+  <script src="js/leaflet.js"></script>
+
+  <!-- Aplicación JS Principal -->
+  <script src="js/app.js"></script>
+</body>
+</html>
