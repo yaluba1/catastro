@@ -1688,6 +1688,19 @@ img {
   transform: translateY(-1px);
 }
 
+.footer-github-link .github-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex-shrink: 0;
+  fill: currentColor;
+  transition: transform var(--transition-fast);
+}
+
+.footer-github-link:hover .github-icon {
+  transform: scale(1.1);
+}
+
 /* Donaciones Crypto / Invítame a un café */
 .footer-tips {
   display: inline-flex;
