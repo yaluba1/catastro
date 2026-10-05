@@ -1,6 +1,6 @@
 # Visor de Catastro - Yaluba
 
-Aplicación web moderna y responsiva para la consulta de referencias catastrales en España, visualización de superficies, cultivos, linderos cartográficos oficiales (WMS INSPIRE del Catastro e IGN PNOA) y enlace directo a Google Maps y Registro de la Propiedad.
+Aplicación web para la consulta de referencias catastrales en España, visualización de superficies, cultivos, linderos cartográficos oficiales (WMS INSPIRE del Catastro e IGN PNOA) y enlace directo a Google Maps y Registro de la Propiedad.
 
 ---
 
@@ -61,12 +61,6 @@ Si prefieres desplegar directamente desde tu terminal utilizando Wrangler:
 # Despliegue directo a Producción:
 npx wrangler pages deploy web --project-name=visor-catastro-yaluba --branch=production
 ```
-
-> [!IMPORTANT]
-> **¿Por qué es necesario `--branch=production`?**
-> * **Rama de Producción de Cloudflare Pages**: En este proyecto de Cloudflare Pages, la rama principal de producción está configurada con el nombre `production`. 
-> * Si ejecutas `wrangler pages deploy` sin especificar la rama o con `--branch=main`, Cloudflare creará un despliegue de **Preview** (vista previa temporal con URL única con hash).
-> * Al indicar `--branch=production`, Cloudflare publica la actualización directamente en el dominio oficial de producción (`https://visor-catastro-yaluba.pages.dev`).
 
 ---
 
