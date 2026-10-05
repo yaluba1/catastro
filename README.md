@@ -59,13 +59,14 @@ Si prefieres desplegar directamente desde tu terminal utilizando Wrangler:
 
 ```bash
 # Despliegue directo a Producción:
-npx wrangler pages deploy web --project-name=visor-catastro-yaluba --branch=main
+npx wrangler pages deploy web --project-name=visor-catastro-yaluba --branch=production
 ```
 
 > [!IMPORTANT]
-> **¿Por qué es necesario `--branch=main`?**
-> * **Entornos de Producción vs. Preview**: Cloudflare Pages asigna el dominio principal (`visor-catastro-yaluba.pages.dev`) exclusivamente a la rama configurada como producción (por defecto `main`). Si ejecutas `wrangler pages deploy` sin el parámetro `--branch=main`, Cloudflare creará un despliegue de **Preview** (vista previa temporal con una URL única con hash) para evitar sobreescribir la versión en vivo por accidente.
-> * **Metadatos de Git locales**: Wrangler detecta automáticamente la carpeta `.git` local en tu equipo y extrae el hash del commit, el autor y el mensaje para registrar la trazabilidad en el panel de Cloudflare. Para que ese registro se publique como la versión oficial en producción, se debe indicar `--branch=main`.
+> **¿Por qué es necesario `--branch=production`?**
+> * **Rama de Producción de Cloudflare Pages**: En este proyecto de Cloudflare Pages, la rama principal de producción está configurada con el nombre `production`. 
+> * Si ejecutas `wrangler pages deploy` sin especificar la rama o con `--branch=main`, Cloudflare creará un despliegue de **Preview** (vista previa temporal con URL única con hash).
+> * Al indicar `--branch=production`, Cloudflare publica la actualización directamente en el dominio oficial de producción (`https://visor-catastro-yaluba.pages.dev`).
 
 ---
 
