@@ -35,6 +35,7 @@ import argparse
 import csv
 import logging
 import os
+import re
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -117,11 +118,14 @@ def query_dnprc(rc: str, retries: int = 3, timeout: int = 15) -> Dict[str, Any]:
                         if pc1 is not None and pc2 is not None and car is not None and cc1 is not None and cc2 is not None:
                             ref_20 = f"{pc1.text or ''}{pc2.text or ''}{car.text or ''}{cc1.text or ''}{cc2.text or ''}".strip()
 
+                        es = loint.find("cat:es", NS).text.strip() if loint is not None and loint.find("cat:es", NS) is not None and loint.find("cat:es", NS).text else ""
                         pt = loint.find("cat:pt", NS).text.strip() if loint is not None and loint.find("cat:pt", NS) is not None and loint.find("cat:pt", NS).text else ""
                         pu = loint.find("cat:pu", NS).text.strip() if loint is not None and loint.find("cat:pu", NS) is not None and loint.find("cat:pu", NS).text else ""
                         dir_str = ldt.text.strip() if ldt is not None and ldt.text else ""
 
                         desc_ubicacion = []
+                        if es:
+                            desc_ubicacion.append(f"Esc. {es}")
                         if pt:
                             desc_ubicacion.append(f"Planta {pt}")
                         if pu:
@@ -131,6 +135,7 @@ def query_dnprc(rc: str, retries: int = 3, timeout: int = 15) -> Dict[str, Any]:
                         if ref_20:
                             unidades_inmuebles.append({
                                 "referencia": ref_20,
+                                "escalera": es,
                                 "planta": pt,
                                 "puerta": pu,
                                 "ubicacion": ubicacion_texto,
@@ -403,23 +408,287 @@ def query_rc_por_coordenadas(lat: float, lon: float, retries: int = 3, timeout: 
     return {"error": "Tiempo de espera agotado al consultar coordenadas.", "latitud": lat, "longitud": lon}
 
 
-def consultar_referencia(rc: str) -> Dict[str, Any]:
+def parse_address_and_unit(raw_text: str) -> tuple[str, Optional[Dict[str, Any]]]:
     """
-    Realiza una consulta combinada de datos descriptivos y geolocalización para una referencia.
-
-    Limpia la referencia, ejecuta la consulta `DNPRC` para datos de superficie, uso y dirección,
-    y consulta `CPMRC` para geolocalización en Google Maps.
+    Extrae planta, puerta y escalera de una dirección postal en lenguaje natural.
 
     Args:
-        rc (str): Referencia catastral a consultar.
+        raw_text (str): Texto introducido por el usuario.
 
     Returns:
-        Dict[str, Any]: Diccionario unificado listo para su exportación a CSV con campos:
-            referencia, clase, poblacion, provincia, tamano_m2, tipo_tamano, enlace_google_maps,
-            latitud, longitud, uso_principal, ano_construccion, coeficiente_participacion,
-            direccion, detalle_aprovechamiento_o_construccion, enlace_sede_catastro y error.
+        tuple[str, Optional[Dict[str, Any]]]: Dirección limpia sin la parte del piso/puerta,
+            y diccionario con la información de la unidad buscada (o None).
     """
-    rc_clean = clean_cadastral_reference(rc)
+    text = (raw_text or "").strip()
+    portal_match = re.search(r"\b(?:nº|num|número|no\.?)?\s*(\d+)\b", text, re.IGNORECASE)
+    if not portal_match:
+        return text, None
+
+    portal_idx = portal_match.end()
+    after_portal = text[portal_idx:]
+
+    unit_regex = re.compile(
+        r"(?:,\s*|\s+)"
+        r"(?:(?:esc(?:alera)?\.?\s*([a-zA-Z0-9]+))\s*,?\s*)?"
+        r"(?:(?:planta|piso|plt\.?)\s*)?"
+        r"(\d+|bajo|bj|ático|atico|sótano|sotano|entresuelo|entreplanta|ppal|principal)"
+        r"[ºª°]?"
+        r"(?:[\s\-_/]+(?:(?:puerta|pta\.?|pt\.?)\s*)?([a-zA-Z0-9]+|dcha|derecha|izq|izquierda|izda|interior|exterior|centro)\b)?",
+        re.IGNORECASE,
+    )
+
+    m = unit_regex.search(after_portal)
+    if not m:
+        return text, None
+
+    esc = (m.group(1) or "").strip()
+    pl = (m.group(2) or "").strip()
+    pu = (m.group(3) or "").strip()
+
+    m_start = m.start()
+    m_end = m.end()
+
+    clean_addr = (
+        text[:portal_idx] + after_portal[:m_start] + " " + after_portal[m_end:]
+    ).strip()
+    clean_addr = re.sub(r"\s*,\s*,", ",", clean_addr)
+    clean_addr = re.sub(r"\s{2,}", " ", clean_addr)
+    clean_addr = re.sub(r",\s*$", "", clean_addr).strip()
+
+    pl_norm = pl.lower()
+    if pl_norm in ["bajo", "bj"]:
+        pl_norm = "00"
+    elif pl_norm in ["entresuelo", "entreplanta"]:
+        pl_norm = "EN"
+    elif pl_norm in ["ático", "atico"]:
+        pl_norm = "AT"
+    else:
+        pl_norm = pl_norm.lstrip("0") or "0"
+
+    pu_norm = pu.upper()
+    if pu_norm in ["DCHA", "DERECHA", "DCHO"]:
+        pu_norm = "DR"
+    elif pu_norm in ["IZQ", "IZQUIERDA", "IZDA"]:
+        pu_norm = "IZ"
+
+    return clean_addr, {
+        "escalera": esc.upper(),
+        "planta": pl_norm,
+        "planta_raw": pl,
+        "puerta": pu_norm,
+        "puerta_raw": pu,
+        "texto_original": m.group(0).strip().lstrip(", "),
+    }
+
+
+def geocode_address(address: str, timeout: int = 6) -> Optional[Dict[str, Any]]:
+    """
+    Geocodifica una dirección usando el servicio oficial CartoCiudad (IGN) con fallback a Nominatim (OSM).
+
+    Args:
+        address (str): Dirección postal en texto libre.
+        timeout (int): Timeout en segundos.
+
+    Returns:
+        Optional[Dict[str, Any]]: Coordenadas (lat, lon), referencia catastral si está disponible y dirección formateada.
+    """
+    # 1. CartoCiudad del IGN
+    try:
+        url_carto = "https://www.cartociudad.es/geocoder/api/geocoder/candidates"
+        resp = requests.get(url_carto, params={"q": address, "limit": 1}, timeout=timeout)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0]
+                rc = item.get("refCatastral")
+                rc_valid = rc if (rc and len(rc) == 14) else None
+                return {
+                    "lat": float(item["lat"]),
+                    "lon": float(item["lng"]),
+                    "refCatastral": rc_valid,
+                    "address": item.get("address") or address,
+                    "source": "CartoCiudad",
+                }
+    except Exception as e:
+        logger.warning(f"Error consultando CartoCiudad: {e}")
+
+    # 2. Nominatim fallback
+    try:
+        url_nom = "https://nominatim.openstreetmap.org/search"
+        headers = {"User-Agent": "VisorCatastroYaluba/1.0"}
+        resp = requests.get(
+            url_nom,
+            params={"q": address, "format": "json", "countrycodes": "es", "limit": 1},
+            headers=headers,
+            timeout=timeout,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0]
+                return {
+                    "lat": float(item["lat"]),
+                    "lon": float(item["lon"]),
+                    "refCatastral": None,
+                    "address": item.get("display_name") or address,
+                    "source": "Nominatim",
+                }
+    except Exception as e:
+        logger.warning(f"Error consultando Nominatim: {e}")
+
+    return None
+
+
+def find_matching_unit(unidades: List[Dict[str, Any]], unit_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Empareja los datos de planta, puerta y escalera extraídos con la lista de unidades de Catastro.
+    """
+    if not unit_info or not unidades:
+        return None
+
+    target_planta = (unit_info.get("planta") or "").lstrip("0") or "0"
+    target_puerta = (unit_info.get("puerta") or "").strip().upper()
+    target_esc = (unit_info.get("escalera") or "").strip().upper()
+
+    for u in unidades:
+        u_planta = (u.get("planta") or "").strip().lstrip("0") or "0"
+        u_puerta = (u.get("puerta") or "").strip().upper()
+        u_esc = (u.get("escalera") or "").strip().upper()
+
+        # Coincidencia de planta
+        planta_ok = (u.get("planta", "").upper() == unit_info.get("planta", "").upper()) or (u_planta == target_planta)
+        if not planta_ok:
+            continue
+
+        # Coincidencia de puerta
+        puerta_ok = True
+        if target_puerta:
+            u_p_clean = u_puerta.lstrip("0")
+            t_p_clean = target_puerta.lstrip("0")
+            puerta_ok = (u_puerta == target_puerta) or (u_p_clean == t_p_clean) or (target_puerta in u_puerta)
+        if not puerta_ok:
+            continue
+
+        # Coincidencia de escalera
+        esc_ok = True
+        if target_esc:
+            esc_ok = (u_esc == target_esc) or (u_esc.lstrip("0") == target_esc.lstrip("0"))
+        if not esc_ok:
+            continue
+
+        return u
+
+    return None
+
+
+def query_por_direccion(query_text: str, retries: int = 3, timeout: int = 15) -> Dict[str, Any]:
+    """
+    Resuelve una consulta por dirección postal en lenguaje natural (ej. 'Calle Atocha 28, 4º B, Madrid'),
+    geocodifica el portal, obtiene la parcela y empareja la unidad inmobiliaria correspondiente.
+    """
+    clean_addr, unit_info = parse_address_and_unit(query_text)
+    geo = geocode_address(clean_addr, timeout=timeout)
+    if not geo:
+        return {
+            "referencia": query_text,
+            "error": f"No se pudo localizar la dirección postal: '{clean_addr}'. Verifica la calle y el municipio.",
+        }
+
+    rc_matriz = geo.get("refCatastral")
+    if not rc_matriz:
+        coord_res = query_rc_por_coordenadas(geo["lat"], geo["lon"], retries=retries, timeout=timeout)
+        if coord_res.get("error"):
+            return {
+                "referencia": query_text,
+                "error": f"Dirección localizada en ({geo['lat']:.5f}, {geo['lon']:.5f}), pero sin parcela catastral en este punto.",
+            }
+        rc_matriz = coord_res["referencia"]
+
+    # Consultar datos catastrales de la parcela o edificio
+    dnprc_data = query_dnprc(rc_matriz, retries=retries, timeout=timeout)
+    if "error" in dnprc_data:
+        return dnprc_data
+
+    # Si se especificó una unidad y el inmueble tiene división horizontal:
+    matched_unit = None
+    unidades = dnprc_data.get("unidades_inmuebles", [])
+    if unit_info and unidades:
+        matched_unit = find_matching_unit(unidades, unit_info)
+        if matched_unit:
+            unit_data = query_dnprc(matched_unit["referencia"], retries=retries, timeout=timeout)
+            if "error" not in unit_data:
+                unit_data["unidades_inmuebles"] = unidades
+                unit_data["referencia_matriz"] = rc_matriz[:14]
+                unit_data["unidad_seleccionada"] = matched_unit
+                dnprc_data = unit_data
+
+    dnprc_data["direccion_busqueda"] = geo["address"]
+    dnprc_data["geocodificador"] = geo.get("source", "")
+    if unit_info:
+        dnprc_data["unidad_buscada"] = unit_info
+
+    geo_data = query_coordenadas(dnprc_data.get("rc", rc_matriz))
+    dnprc_data["latitud"] = geo_data.get("latitud") or geo["lat"]
+    dnprc_data["longitud"] = geo_data.get("longitud") or geo["lon"]
+    dnprc_data["google_maps_url"] = geo_data.get("google_maps_url") or f"https://www.google.com/maps?q={dnprc_data['latitud']},{dnprc_data['longitud']}"
+
+    return dnprc_data
+
+
+def consultar_referencia(rc: str) -> Dict[str, Any]:
+    """
+    Realiza una consulta combinada de datos descriptivos y geolocalización para una referencia
+    o una dirección postal en lenguaje natural.
+    """
+    raw = (rc or "").strip()
+    clean_candidate = clean_cadastral_reference(raw)
+    es_rc_pura = not (" " in raw) and (len(clean_candidate) in [14, 20]) and clean_candidate.isalnum()
+
+    if not es_rc_pura and len(raw) > 0:
+        # Tratar como dirección postal
+        dir_res = query_por_direccion(raw)
+        if "error" in dir_res:
+            return {
+                "referencia": raw,
+                "clase": "",
+                "poblacion": "",
+                "provincia": "",
+                "tamano_m2": 0,
+                "tipo_tamano": "",
+                "enlace_google_maps": "",
+                "latitud": None,
+                "longitud": None,
+                "uso_principal": "",
+                "ano_construccion": "",
+                "coeficiente_participacion": "",
+                "direccion": "",
+                "detalle_aprovechamiento_o_construccion": "",
+                "enlace_sede_catastro": "",
+                "error": dir_res["error"],
+            }
+        return {
+            "referencia": dir_res.get("rc", clean_candidate),
+            "clase": dir_res.get("clase", ""),
+            "poblacion": dir_res.get("poblacion", ""),
+            "provincia": dir_res.get("provincia", ""),
+            "tamano_m2": dir_res.get("tamano_m2", 0),
+            "tipo_tamano": dir_res.get("tipo_tamano", ""),
+            "enlace_google_maps": dir_res.get("google_maps_url", ""),
+            "latitud": dir_res.get("latitud"),
+            "longitud": dir_res.get("longitud"),
+            "uso_principal": dir_res.get("uso_principal", ""),
+            "ano_construccion": dir_res.get("ano_construccion", ""),
+            "coeficiente_participacion": dir_res.get("coeficiente_participacion", ""),
+            "direccion": dir_res.get("direccion", ""),
+            "detalle_aprovechamiento_o_construccion": dir_res.get("detalle_info", ""),
+            "enlace_sede_catastro": dir_res.get("enlace_sede_catastro", ""),
+            "unidades_inmuebles": dir_res.get("unidades_inmuebles", []),
+            "unidad_seleccionada": dir_res.get("unidad_seleccionada"),
+            "direccion_busqueda": dir_res.get("direccion_busqueda", ""),
+            "error": "",
+        }
+
+    rc_clean = clean_candidate
     if len(rc_clean) < 14:
         return {
             "referencia": rc,
@@ -488,7 +757,7 @@ def export_to_csv(results: List[Dict[str, Any]], filepath: str, delimiter: str =
     
     os.makedirs(os.path.dirname(filepath) if os.path.dirname(filepath) else ".", exist_ok=True)
     with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=delimiter)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=delimiter, extrasaction="ignore")
         writer.writeheader()
         for r in results:
             writer.writerow(r)
@@ -585,10 +854,13 @@ def main() -> None:
     seen = set()
     unique_rcs = []
     for rc in rc_list:
-        clean = clean_cadastral_reference(rc)
-        if clean and clean not in seen:
-            seen.add(clean)
-            unique_rcs.append(clean)
+        raw_val = rc.strip()
+        clean = clean_cadastral_reference(raw_val)
+        is_rc = not (" " in raw_val) and (len(clean) in [14, 20]) and clean.isalnum()
+        final_val = clean if is_rc else raw_val
+        if final_val and final_val not in seen:
+            seen.add(final_val)
+            unique_rcs.append(final_val)
 
     logger.info(f"Consultando Catastro para {len(unique_rcs)} referencia(s)...")
 

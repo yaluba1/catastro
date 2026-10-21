@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://visor-catastro-yaluba.pages.dev/sitemap.xml
+

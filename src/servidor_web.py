@@ -31,6 +31,7 @@ from src.consultar_catastro import (
     clean_cadastral_reference,
     query_coordenadas,
     query_dnprc,
+    query_por_direccion,
     query_rc_por_coordenadas,
 )
 
@@ -111,9 +112,12 @@ class CatastroWebHandler(SimpleHTTPRequestHandler):
     def handle_api_consultar(self, parsed_url: urllib.parse.ParseResult):
         """Procesa la consulta a Catastro y devuelve JSON estructurado."""
         params = urllib.parse.parse_qs(parsed_url.query)
+        q_param = params.get("q", [""])[0].strip() or params.get("direccion", [""])[0].strip()
         rc_raw = params.get("rc", [""])[0].strip()
         lat_param = params.get("lat", [""])[0].strip()
         lon_param = params.get("lon", [""])[0].strip()
+
+        input_str = q_param or rc_raw
 
         query_lat = None
         query_lon = None
@@ -124,14 +128,16 @@ class CatastroWebHandler(SimpleHTTPRequestHandler):
                 query_lon = float(lon_param)
             except ValueError:
                 pass
-        elif "," in rc_raw:
-            parts = rc_raw.split(",")
-            if len(parts) == 2:
-                try:
-                    query_lat = float(parts[0].strip())
-                    query_lon = float(parts[1].strip())
-                except ValueError:
-                    pass
+        elif "," in input_str and len(input_str.split(",")) == 2:
+            parts = input_str.split(",")
+            try:
+                p_lat = float(parts[0].strip())
+                p_lon = float(parts[1].strip())
+                if abs(p_lat) <= 90 and abs(p_lon) <= 180:
+                    query_lat = p_lat
+                    query_lon = p_lon
+            except ValueError:
+                pass
 
         if query_lat is not None and query_lon is not None:
             coord_res = query_rc_por_coordenadas(query_lat, query_lon)
@@ -141,12 +147,68 @@ class CatastroWebHandler(SimpleHTTPRequestHandler):
                 )
                 return
             rc = coord_res["referencia"]
+            is_address_mode = False
         else:
-            rc = clean_cadastral_reference(rc_raw)
+            clean_cand = clean_cadastral_reference(input_str)
+            es_rc_pura = not (" " in input_str) and (len(clean_cand) in [14, 20]) and clean_cand.isalnum()
+
+            if not es_rc_pura and len(input_str) > 0:
+                is_address_mode = True
+                rc = ""
+            else:
+                is_address_mode = False
+                rc = clean_cand
+
+        if is_address_mode:
+            dir_res = query_por_direccion(input_str)
+            if dir_res.get("error"):
+                self.send_json_response(
+                    {"error": dir_res["error"]}, status=HTTPStatus.NOT_FOUND
+                )
+                return
+
+            cpt_raw = dir_res.get("coeficiente_participacion", "")
+            cpt_formatted = ""
+            if cpt_raw:
+                try:
+                    num_cpt = float(str(cpt_raw).replace(",", "."))
+                    if num_cpt.is_integer():
+                        cpt_formatted = f"{int(num_cpt)}"
+                    else:
+                        cpt_formatted = f"{num_cpt:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+                except Exception:
+                    cpt_formatted = str(cpt_raw)
+
+            resultado = {
+                "referencia": dir_res.get("rc", ""),
+                "referencia_matriz": dir_res.get("referencia_matriz", dir_res.get("rc", "")[:14]),
+                "unidades_inmuebles": dir_res.get("unidades_inmuebles", []),
+                "unidad_seleccionada": dir_res.get("unidad_seleccionada"),
+                "direccion_busqueda": dir_res.get("direccion_busqueda", ""),
+                "geocodificador": dir_res.get("geocodificador", ""),
+                "unidad_buscada": dir_res.get("unidad_buscada"),
+                "clase": dir_res.get("clase", ""),
+                "poblacion": dir_res.get("poblacion", ""),
+                "provincia": dir_res.get("provincia", ""),
+                "tamano_m2": dir_res.get("tamano_m2", 0),
+                "tipo_tamano": dir_res.get("tipo_tamano", ""),
+                "uso_principal": dir_res.get("uso_principal", ""),
+                "ano_construccion": dir_res.get("ano_construccion", ""),
+                "coeficiente_participacion": cpt_formatted,
+                "direccion": dir_res.get("direccion", ""),
+                "detalle_info": dir_res.get("detalle_info", ""),
+                "latitud": dir_res.get("latitud"),
+                "longitud": dir_res.get("longitud"),
+                "google_maps_url": dir_res.get("google_maps_url", ""),
+                "sede_catastro_url": dir_res.get("sede_catastro_url", ""),
+                "error": "",
+            }
+            self.send_json_response(resultado, status=HTTPStatus.OK)
+            return
 
         if not rc or len(rc) < 14:
             self.send_json_response(
-                {"error": "La referencia catastral debe tener al menos 14 caracteres o indicar coordenadas válidas."},
+                {"error": "Debes indicar una referencia catastral válida (14 o 20 caracteres), una dirección postal o coordenadas GPS."},
                 status=HTTPStatus.BAD_REQUEST,
             )
             return

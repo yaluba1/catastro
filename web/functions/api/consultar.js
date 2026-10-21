@@ -1,7 +1,8 @@
 /**
  * Cloudflare Pages Function: /api/consultar
  * 
- * Proxy de backend y enriquecimiento con IA para la consulta de referencias catastrales y coordenadas GPS.
+ * Proxy de backend y enriquecimiento con IA para la consulta de referencias catastrales,
+ * direcciones postales y coordenadas GPS.
  * Consulta la Sede Electrónica del Catastro (OVC) y opcionalmente utiliza
  * Cloudflare Workers AI (@cf/meta/llama-3.1-8b-instruct) para generar un resumen
  * inteligente del inmueble o parcela.
@@ -9,6 +10,7 @@
 
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
+  const qParam = (url.searchParams.get('q') || url.searchParams.get('direccion') || '').trim();
   const rcRaw = (url.searchParams.get('rc') || '').trim();
   const latParam = (url.searchParams.get('lat') || '').trim();
   const lonParam = (url.searchParams.get('lon') || '').trim();
@@ -23,7 +25,13 @@ export async function onRequestGet(context) {
 
   let queryLat = null;
   let queryLon = null;
+  let direccionBusqueda = '';
+  let unidadBuscada = null;
+  let geocodificadorUsado = '';
 
+  const inputStr = qParam || rcRaw;
+
+  // 1. Comprobar si son coordenadas explícitas en lat/lon params
   if (latParam && lonParam) {
     const pLat = parseFloat(latParam);
     const pLon = parseFloat(lonParam);
@@ -31,46 +39,105 @@ export async function onRequestGet(context) {
       queryLat = pLat;
       queryLon = pLon;
     }
-  } else if (rcRaw.includes(',')) {
-    const parts = rcRaw.split(',');
-    if (parts.length === 2) {
-      const pLat = parseFloat(parts[0].trim());
-      const pLon = parseFloat(parts[1].trim());
-      if (!isNaN(pLat) && !isNaN(pLon)) {
-        queryLat = pLat;
-        queryLon = pLon;
-      }
+  } else {
+    // 2. Comprobar si la cadena contiene coordenadas GPS o enlace de Maps
+    const coordsDetectadas = detectarCoordenadas(inputStr);
+    if (coordsDetectadas) {
+      queryLat = coordsDetectadas.lat;
+      queryLon = coordsDetectadas.lon;
     }
   }
 
   let rc = '';
+
   if (queryLat !== null && queryLon !== null) {
+    // Consulta a partir de coordenadas GPS
     const coordRes = await obtenerRCDeCoordenadas(queryLat, queryLon);
     if (coordRes.error) {
       return new Response(JSON.stringify(coordRes), { status: 404, headers: corsHeaders });
     }
     rc = coordRes.referencia;
   } else {
-    rc = rcRaw.replace(/[\s\-_.]/g, '').toUpperCase();
+    // Comprobar si es una Referencia Catastral pura o una Dirección Postal
+    const cleanCandidate = inputStr.replace(/[\s\-_.]/g, '').toUpperCase();
+    const esRcValida = !inputStr.includes(' ') && (cleanCandidate.length === 14 || cleanCandidate.length === 20) && /^[0-9A-Z]+$/.test(cleanCandidate);
+
+    if (esRcValida && !qParam) {
+      rc = cleanCandidate;
+    } else if (inputStr.length > 0) {
+      // Es una dirección postal en lenguaje natural
+      const parsed = parseAddressAndUnit(inputStr);
+      unidadBuscada = parsed.unitInfo;
+
+      const geoRes = await geocodeAddress(parsed.cleanAddress);
+      if (!geoRes) {
+        return new Response(JSON.stringify({
+          error: `No se pudo encontrar ninguna ubicación para la dirección: "${parsed.cleanAddress}". Comprueba la vía, el número y el municipio.`
+        }), { status: 404, headers: corsHeaders });
+      }
+
+      queryLat = geoRes.lat;
+      queryLon = geoRes.lon;
+      direccionBusqueda = geoRes.address;
+      geocodificadorUsado = geoRes.source;
+
+      // Si CartoCiudad devolvió directamente la parcela de 14 caracteres:
+      if (geoRes.refCatastral && geoRes.refCatastral.length === 14) {
+        rc = geoRes.refCatastral;
+      } else {
+        // Fallback: resolver parcela mediante coordenadas de Catastro
+        const coordRes = await obtenerRCDeCoordenadas(queryLat, queryLon);
+        if (coordRes.error) {
+          return new Response(JSON.stringify({
+            error: `La dirección "${geoRes.address}" fue localizada en coordenadas (${queryLat.toFixed(5)}, ${queryLon.toFixed(5)}), pero no se encontró ninguna parcela catastral en este punto.`
+          }), { status: 404, headers: corsHeaders });
+        }
+        rc = coordRes.referencia;
+      }
+    }
   }
 
   if (!rc || rc.length < 14) {
     return new Response(JSON.stringify({
-      error: 'La referencia catastral debe tener al menos 14 caracteres o indicar coordenadas válidas.'
+      error: 'Debes indicar una referencia catastral válida (14 o 20 caracteres), una dirección postal o coordenadas GPS.'
     }), { status: 400, headers: corsHeaders });
   }
 
   try {
-    const data = await obtenerDatosCatastro(rc);
+    let data = await obtenerDatosCatastro(rc);
 
     if (data.error) {
       return new Response(JSON.stringify(data), { status: 404, headers: corsHeaders });
     }
 
+    // Si se buscó una dirección con piso/puerta específico y el edificio tiene múltiples inmuebles:
+    if (unidadBuscada && data.unidades_inmuebles && data.unidades_inmuebles.length > 0) {
+      const matched = findMatchingUnit(data.unidades_inmuebles, unidadBuscada);
+      if (matched) {
+        const fullUnitData = await obtenerDatosCatastro(matched.referencia);
+        if (!fullUnitData.error) {
+          fullUnitData.unidades_inmuebles = data.unidades_inmuebles;
+          fullUnitData.referencia_matriz = data.referencia_matriz || rc.substring(0, 14);
+          fullUnitData.unidad_seleccionada = matched;
+          data = fullUnitData;
+        }
+      }
+    }
+
+    if (direccionBusqueda) {
+      data.direccion_busqueda = direccionBusqueda;
+      if (geocodificadorUsado) data.geocodificador = geocodificadorUsado;
+    }
+    if (unidadBuscada) {
+      data.unidad_buscada = unidadBuscada;
+    }
+
     if (queryLat !== null && queryLon !== null) {
-      if (!data.latitud) data.latitud = queryLat;
-      if (!data.longitud) data.longitud = queryLon;
-      if (!data.google_maps_url) data.google_maps_url = `https://www.google.com/maps?q=${queryLat},${queryLon}`;
+      data.latitud_parcela = data.latitud;
+      data.longitud_parcela = data.longitud;
+      data.latitud = queryLat;
+      data.longitud = queryLon;
+      data.google_maps_url = `https://www.google.com/maps?q=${queryLat},${queryLon}`;
     }
 
     // Enriquecimiento con Cloudflare Workers AI si la variable de entorno 'AI' está configurada
@@ -131,6 +198,183 @@ export async function onRequestOptions() {
 }
 
 /**
+ * Detecta si una cadena contiene coordenadas GPS decimales o un enlace de Google Maps.
+ */
+function detectarCoordenadas(texto) {
+  if (!texto) return null;
+  const t = texto.trim();
+
+  // Enlace de Google Maps
+  const gmapsMatch = t.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || t.match(/[?&](?:q|query)=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (gmapsMatch) {
+    const lat = parseFloat(gmapsMatch[1]);
+    const lon = parseFloat(gmapsMatch[2]);
+    if (!isNaN(lat) && !isNaN(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+      return { lat, lon };
+    }
+  }
+
+  // Par decimal lat, lon
+  const pairMatch = t.match(/^([+-]?\d+(?:\.\d+)?)\s*[,;\s]\s*([+-]?\d+(?:\.\d+)?)$/);
+  if (pairMatch) {
+    const lat = parseFloat(pairMatch[1]);
+    const lon = parseFloat(pairMatch[2]);
+    if (!isNaN(lat) && !isNaN(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+      return { lat, lon };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extrae planta, puerta y escalera de una dirección postal en lenguaje natural.
+ */
+function parseAddressAndUnit(rawText) {
+  const text = (rawText || '').trim();
+
+  const portalMatch = text.match(/\b(?:nº|num|número|no\.?)?\s*(\d+)\b/i);
+  if (!portalMatch) {
+    return { cleanAddress: text, unitInfo: null };
+  }
+
+  const portalIdx = portalMatch.index + portalMatch[0].length;
+  const afterPortal = text.substring(portalIdx);
+
+  const unitRegex = /(?:,\s*|\s+)(?:(?:esc(?:alera)?\.?\s*([a-zA-Z0-9]+))\s*,?\s*)?(?:(?:planta|piso|plt\.?)\s*)?(\d+|bajo|bj|ático|atico|sótano|sotano|entresuelo|entreplanta|ppal|principal)[ºª°]?(?:[\s\-_/]+(?:(?:puerta|pta\.?|pt\.?)\s*)?([a-zA-Z0-9]+|dcha|derecha|izq|izquierda|izda|interior|exterior|centro)\b)?/i;
+
+  const m = afterPortal.match(unitRegex);
+  if (!m) {
+    return { cleanAddress: text, unitInfo: null };
+  }
+
+  const esc = (m[1] || '').trim();
+  const pl = (m[2] || '').trim();
+  const pu = (m[3] || '').trim();
+
+  const mStart = m.index;
+  const mEnd = m.index + m[0].length;
+
+  let cleanAddr = (text.substring(0, portalIdx) + afterPortal.substring(0, mStart) + ' ' + afterPortal.substring(mEnd)).trim();
+  cleanAddr = cleanAddr.replace(/\s*,\s*,/g, ',');
+  cleanAddr = cleanAddr.replace(/\s{2,}/g, ' ');
+  cleanAddr = cleanAddr.replace(/,\s*$/, '').trim();
+
+  let plNorm = pl.toLowerCase();
+  if (plNorm === 'bajo' || plNorm === 'bj') plNorm = '00';
+  else if (plNorm === 'entresuelo' || plNorm === 'entreplanta') plNorm = 'EN';
+  else if (plNorm === 'ático' || plNorm === 'atico') plNorm = 'AT';
+  else plNorm = plNorm.replace(/^0+/, '') || '0';
+
+  let puNorm = pu.toUpperCase();
+  if (['DCHA', 'DERECHA', 'DCHO'].includes(puNorm)) puNorm = 'DR';
+  else if (['IZQ', 'IZQUIERDA', 'IZDA'].includes(puNorm)) puNorm = 'IZ';
+
+  return {
+    cleanAddress: cleanAddr,
+    unitInfo: {
+      escalera: esc.toUpperCase(),
+      planta: plNorm,
+      plantaRaw: pl,
+      puerta: puNorm,
+      puertaRaw: pu,
+      textoOriginal: m[0].trim().replace(/^,\s*/, '')
+    }
+  };
+}
+
+/**
+ * Geocodifica una dirección usando CartoCiudad (IGN) con fallback a Nominatim (OSM).
+ */
+async function geocodeAddress(address) {
+  // 1. CartoCiudad del IGN
+  try {
+    const urlCarto = `https://www.cartociudad.es/geocoder/api/geocoder/candidates?q=${encodeURIComponent(address)}&limit=1`;
+    const resp = await fetch(urlCarto);
+    if (resp.ok) {
+      const data = await resp.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const item = data[0];
+        const rc = (item.refCatastral && item.refCatastral.length === 14) ? item.refCatastral : null;
+        return {
+          lat: parseFloat(item.lat),
+          lon: parseFloat(item.lng),
+          refCatastral: rc,
+          address: item.address || address,
+          source: 'CartoCiudad'
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('CartoCiudad error:', e.message);
+  }
+
+  // 2. Nominatim fallback
+  try {
+    const urlNom = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&countrycodes=es&limit=1`;
+    const resp = await fetch(urlNom, {
+      headers: { 'User-Agent': 'VisorCatastroYaluba/1.0' }
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const item = data[0];
+        return {
+          lat: parseFloat(item.lat),
+          lon: parseFloat(item.lon),
+          refCatastral: null,
+          address: item.display_name || address,
+          source: 'Nominatim'
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Nominatim error:', e.message);
+  }
+
+  return null;
+}
+
+/**
+ * Empareja la unidad inmobiliaria buscada con el listado devuelto por Catastro.
+ */
+function findMatchingUnit(unidades, unitInfo) {
+  if (!unitInfo || !Array.isArray(unidades) || unidades.length === 0) return null;
+  const targetPlanta = (unitInfo.planta || '').replace(/^0+/, '') || '0';
+  const targetPuerta = (unitInfo.puerta || '').trim().toUpperCase();
+  const targetEsc = (unitInfo.escalera || '').trim().toUpperCase();
+
+  for (const u of unidades) {
+    const uPlanta = (u.planta || '').trim().replace(/^0+/, '') || '0';
+    const uPuerta = (u.puerta || '').trim().toUpperCase();
+    const uEsc = (u.escalera || '').trim().toUpperCase();
+
+    // Planta match
+    const plantaMatches = (u.planta.toUpperCase() === unitInfo.planta.toUpperCase() || uPlanta === targetPlanta);
+    if (!plantaMatches) continue;
+
+    // Puerta match
+    let puertaMatches = true;
+    if (targetPuerta) {
+      const uPuertaClean = uPuerta.replace(/^0+/, '');
+      const tPuertaClean = targetPuerta.replace(/^0+/, '');
+      puertaMatches = (uPuerta === targetPuerta || uPuertaClean === tPuertaClean || uPuerta.includes(targetPuerta));
+    }
+    if (!puertaMatches) continue;
+
+    // Escalera match
+    let escMatches = true;
+    if (targetEsc) {
+      escMatches = (uEsc === targetEsc || uEsc.replace(/^0+/, '') === targetEsc.replace(/^0+/, ''));
+    }
+    if (!escMatches) continue;
+
+    return u;
+  }
+  return null;
+}
+
+/**
  * Consulta OVC y extrae campos mediante expresiones regulares compatibles con Workers
  */
 async function obtenerDatosCatastro(rc) {
@@ -162,16 +406,22 @@ async function obtenerDatosCatastro(rc) {
       const car = (block.match(/<car>(.*?)<\/car>/i) || [])[1] || '';
       const cc1 = (block.match(/<cc1>(.*?)<\/cc1>/i) || [])[1] || '';
       const cc2 = (block.match(/<cc2>(.*?)<\/cc2>/i) || [])[1] || '';
+      const es = (block.match(/<es>(.*?)<\/es>/i) || [])[1] || '';
       const pt = (block.match(/<pt>(.*?)<\/pt>/i) || [])[1] || '';
       const pu = (block.match(/<pu>(.*?)<\/pu>/i) || [])[1] || '';
       const ldt = (block.match(/<ldt>(.*?)<\/ldt>/i) || [])[1] || '';
       const fullRc = `${pc1}${pc2}${car}${cc1}${cc2}`.trim();
       if (fullRc) {
+        const desc = [];
+        if (es.trim()) desc.push(`Esc. ${es.trim()}`);
+        if (pt.trim()) desc.push(`Planta ${pt.trim()}`);
+        if (pu.trim()) desc.push(`Puerta ${pu.trim()}`);
         unidades.push({
           referencia: fullRc,
+          escalera: es.trim(),
           planta: pt.trim(),
           puerta: pu.trim(),
-          ubicacion: `Planta ${pt.trim() || '-'} Puerta ${pu.trim() || '-'}`.trim(),
+          ubicacion: desc.join(' - ') || 'Inmueble',
           direccion: ldt.trim()
         });
       }

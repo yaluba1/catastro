@@ -3,12 +3,108 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
-  <meta name="description" content="Visor de Catastro de Yaluba: consulta datos físicos, superficies, cultivos, cartografía y ubicación en Google Maps a partir de referencias catastrales en España.">
+  <meta name="description" content="Visor de Catastro de Yaluba: consulta gratis por referencia catastral o coordenadas GPS la superficie, cultivos, linderos, ortofoto PNOA y ubicación en Google Maps de cualquier parcela o inmueble en España.">
   <meta name="theme-color" content="#7DA92E" id="meta-theme-color">
-  <title>Visor de Catastro | Yaluba</title>
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+  <meta name="author" content="Yaluba">
+  <title>Visor de Catastro | Consulta de Referencia Catastral y Parcelas en España – Yaluba</title>
+  <link rel="canonical" href="https://visor-catastro-yaluba.pages.dev/">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="img/yaluba_logo_sml.png">
+  <!-- Open Graph / Twitter -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Yaluba">
+  <meta property="og:locale" content="es_ES">
+  <meta property="og:title" content="Visor de Catastro | Consulta de Referencia Catastral en España">
+  <meta property="og:description" content="Consulta gratis superficie, cultivos, linderos cartográficos y ubicación en Google Maps a partir de referencia catastral o coordenadas GPS.">
+  <meta property="og:url" content="https://visor-catastro-yaluba.pages.dev/">
+  <meta property="og:image" content="https://visor-catastro-yaluba.pages.dev/img/og-image.png">
+  <meta property="og:image:secure_url" content="https://visor-catastro-yaluba.pages.dev/img/og-image.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Visor de Catastro de Yaluba - Consulta de Referencias Catastrales y Parcelas en España">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Visor de Catastro | Consulta de Referencias y Parcelas – Yaluba">
+  <meta name="twitter:description" content="Consulta gratis superficie, cultivos, linderos PNOA y ubicación a partir de referencia catastral o coordenadas GPS.">
+  <meta name="twitter:image" content="https://visor-catastro-yaluba.pages.dev/img/og-image.png">
+
+  <!-- Datos estructurados (Schema.org WebApplication + FAQPage) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebApplication",
+        "name": "Visor de Catastro",
+        "alternateName": "Visor de Catastro Yaluba",
+        "url": "https://visor-catastro-yaluba.pages.dev/",
+        "image": "https://visor-catastro-yaluba.pages.dev/img/og-image.png",
+        "description": "Consulta de referencias catastrales en España: superficies, cultivos, linderos, ortofoto PNOA y ubicación en Google Maps.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Any",
+        "inLanguage": "es",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Yaluba",
+          "logo": "https://visor-catastro-yaluba.pages.dev/img/yaluba_logo.png"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Qué es la referencia catastral y cómo se compone?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "La referencia catastral es el código identificador oficial y obligatorio de 20 caracteres alfanuméricos asignado por la Dirección General del Catastro a cada bien inmueble en España. Permite situarlo con exactitud en la cartografía catastral."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Cómo buscar una parcela rústica o urbana por coordenadas GPS?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Puedes introducir directamente las coordenadas decimales (latitud, longitud), usar el botón 'Mi ubicación' desde tu móvil o hacer clic sobre cualquier parcela del visor cartográfico interactivo."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Qué información ofrece este visor de Catastro?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Muestra la ortofoto aérea del Instituto Geográfico Nacional (IGN PNOA), la capa WMS de linderos oficiales del Catastro (INSPIRE), la superficie gráfica de la parcela, el desglose de cultivos agrícolas o unidades construidas y acceso a Google Maps."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Cuál es la diferencia entre el Catastro y el Registro de la Propiedad?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "El Catastro Inmobiliario (Ministerio de Hacienda) describe las características físicas y tributarias del inmueble, mientras que el Registro de la Propiedad (Ministerio de Justicia) certifica la titularidad jurídica y las cargas legales (hipotecas, embargos) a través de la Nota Simple."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿La consulta de datos catastrales en esta web es gratuita?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sí, la consulta pública es 100% gratuita y en tiempo real a través de los servicios web abiertos oficiales de la Dirección General del Catastro y el Instituto Geográfico Nacional."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- Favicon e Iconos -->
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="img/favicon-16x16.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="img/favicon-96x96.png">
+  <link rel="apple-touch-icon" sizes="128x128" href="img/favicon-128x128.png">
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,8 +114,8 @@
   <!-- Leaflet CSS (Local) -->
   <link rel="stylesheet" href="css/leaflet.css">
 
-  <!-- App Styles -->
-  <link rel="stylesheet" href="css/styles.css">
+  <!-- App Styles (con control de versiones para evitar caché obsoleta) -->
+  <link rel="stylesheet" href="css/styles.css?v=2.2.0">
 </head>
 <body>
   <!-- Header principal -->
@@ -64,11 +160,11 @@
     <div class="content-wrapper">
 
       <!-- Sección de Búsqueda Inteligente -->
-      <section class="search-section" aria-label="Búsqueda de Referencia Catastral o Coordenadas">
+      <section class="search-section" aria-label="Búsqueda de Referencia Catastral, Dirección Postal o Coordenadas">
         <div class="search-card">
           <div class="search-header">
             <h2 class="search-headline">Consulta de Inmuebles, Parcelas y Ubicación</h2>
-            <p class="search-subhead">Introduce una referencia catastral (14 o 20 caracteres), coordenadas GPS (lat, lon) o haz clic en cualquier parcela del visor inferior.</p>
+            <p class="search-subhead">Introduce una referencia catastral (14 o 20 caracteres), una dirección postal (calle, número y piso opcional), coordenadas GPS o haz clic en cualquier parcela del visor inferior.</p>
           </div>
 
           <form id="search-form" class="search-form" autocomplete="off">
@@ -83,12 +179,11 @@
                 type="text" 
                 id="rc-input" 
                 class="rc-input" 
-                placeholder="Referencia (ej: 40204A006000510000JM) o GPS (ej: 40.4166, -3.7038)" 
-                maxlength="65"
+                placeholder="Ref. Catastral, Dirección (ej: Atocha 28, 4º B) o Coordenadas GPS" 
+                maxlength="150"
                 spellcheck="false"
-                autocapitalize="characters"
                 required
-                aria-label="Referencia Catastral o Coordenadas GPS"
+                aria-label="Referencia Catastral, Dirección Postal o Coordenadas GPS"
               >
               <button type="button" id="clear-btn" class="clear-btn" aria-label="Borrar texto" title="Borrar">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -111,7 +206,7 @@
             
             <div class="input-footer">
               <span id="char-counter" class="char-counter">0 caracteres</span>
-              <span id="format-hint" class="format-hint">Acepta Ref. Catastral o Coordenadas (lat, lon)</span>
+              <span id="format-hint" class="format-hint">Acepta Ref. Catastral, Dirección Postal o Coordenadas GPS</span>
               <span class="map-hint-text">💡 Toca o haz clic en cualquier parcela en el visor</span>
             </div>
           </form>
@@ -540,6 +635,94 @@
         </div>
       </section>
 
+      <!-- Guía y Preguntas Frecuentes (SEO & Ayuda) -->
+      <section id="faq-section" class="faq-section" aria-label="Preguntas Frecuentes sobre el Catastro">
+        <div class="section-title-bar">
+          <div class="title-with-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <h3>Guía y Preguntas Frecuentes</h3>
+          </div>
+          <span class="faq-badge">Ayuda oficial</span>
+        </div>
+
+        <div class="faq-card">
+          <div class="faq-accordion-list">
+            <details class="faq-item">
+              <summary class="faq-summary">
+                <span class="faq-question">¿Qué es la referencia catastral y cómo se compone?</span>
+                <span class="faq-chevron" aria-hidden="true">▾</span>
+              </summary>
+              <div class="faq-content">
+                <p>La <strong>referencia catastral</strong> es el código identificador único oficial asignado por la Dirección General del Catastro a cada bien inmueble en España. Consta de <strong>20 caracteres alfanuméricos</strong> (o 14 caracteres a nivel de finca o parcela matriz):</p>
+                <ul>
+                  <li><strong>Inmuebles rústicos:</strong> identifican provincia (2 dígitos), municipio (3), sector (1), polígono (3), parcela (5), identificador de inmueble (4) y caracteres de control (2).</li>
+                  <li><strong>Inmuebles urbanos:</strong> identifican la finca o manzana (7 caracteres), la hoja de plano (7), el número de inmueble/planta/puerta (4) y caracteres de control (2).</li>
+                </ul>
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-summary">
+                <span class="faq-question">¿Cómo buscar una parcela rústica o urbana por coordenadas GPS?</span>
+                <span class="faq-chevron" aria-hidden="true">▾</span>
+              </summary>
+              <div class="faq-content">
+                <p>Puedes localizar cualquier finca en España de tres formas diferentes:</p>
+                <ol>
+                  <li>Escribiendo las <strong>coordenadas decimales WGS84</strong> (ejemplo: <code>40.4166, -3.7038</code>) en el buscador superior.</li>
+                  <li>Pulsando el botón <strong>«Mi ubicación»</strong> para obtener la posición GPS actual de tu smartphone o equipo.</li>
+                  <li>Haciendo <strong>clic o toque táctil directamente sobre cualquier parcela</strong> en el visor cartográfico interactivo.</li>
+                </ol>
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-summary">
+                <span class="faq-question">¿Qué información ofrece este visor de Catastro?</span>
+                <span class="faq-chevron" aria-hidden="true">▾</span>
+              </summary>
+              <div class="faq-content">
+                <p>Proporciona acceso inmediato y unificado a:</p>
+                <ul>
+                  <li><strong>Cartografía oficial:</strong> Ortofoto aérea satelital de máxima resolución del Instituto Geográfico Nacional (IGN PNOA) combinada con la capa vectorial WMS de linderos del Catastro (directiva europea INSPIRE).</li>
+                  <li><strong>Datos físicos y constructivos:</strong> Superficie de suelo, metros cuadrados construidos, año de construcción, uso principal y desglose de unidades en división horizontal.</li>
+                  <li><strong>Desglose agrario:</strong> Subparcelas, clases de cultivo e intensidad productiva para fincas rústicas.</li>
+                  <li><strong>Navegación externa:</strong> Apertura de coordenadas exactas en Google Maps y acceso al Geoportal de Registradores.</li>
+                </ul>
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-summary">
+                <span class="faq-question">¿Cuál es la diferencia entre el Catastro y el Registro de la Propiedad?</span>
+                <span class="faq-chevron" aria-hidden="true">▾</span>
+              </summary>
+              <div class="faq-content">
+                <p>Aunque ambos organismos colaboran (Ley 13/2015), tienen funciones distintas:</p>
+                <ul>
+                  <li><strong>Catastro Inmobiliario (Ministerio de Hacienda):</strong> Es un registro administrativo obligatorio con fines censales y tributarios (IBI). Describe la localización física, superficie, cultivos y cartografía de las fincas.</li>
+                  <li><strong>Registro de la Propiedad (Ministerio de Justicia):</strong> Es la institución jurídica que otorga fe pública y seguridad jurídica sobre la titularidad del dueño y las posibles cargas (hipotecas, embargos o servidumbres) a través de la <em>Nota Simple</em>.</li>
+                </ul>
+              </div>
+            </details>
+
+            <details class="faq-item">
+              <summary class="faq-summary">
+                <span class="faq-question">¿La consulta de parcelas en esta aplicación es gratuita y oficial?</span>
+                <span class="faq-chevron" aria-hidden="true">▾</span>
+              </summary>
+              <div class="faq-content">
+                <p><strong>Sí, es completamente gratuita y libre de intermediarios.</strong> Todos los datos de consulta pública y capas cartográficas provienen de los servicios web abiertos oficiales de la <em>Dirección General del Catastro</em> y el <em>Instituto Geográfico Nacional</em> del Gobierno de España.</p>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
     </div>
   </main>
 
@@ -634,7 +817,7 @@
   <!-- Leaflet JS (Local) -->
   <script src="js/leaflet.js"></script>
 
-  <!-- Aplicación JS Principal -->
-  <script src="js/app.js"></script>
+  <!-- Aplicación JS Principal (con control de versiones para evitar caché obsoleta) -->
+  <script src="js/app.js?v=2.2.0"></script>
 </body>
 </html>

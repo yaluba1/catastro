@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let mapMarker = null;
 
   // ==========================================
-  // 3. DETECCIÓN Y FORMATEO DE ENTRADA (RC / GPS)
+  // 3. DETECCIÓN Y FORMATEO DE ENTRADA (RC / GPS / DIRECCIÓN)
   // ==========================================
   function cleanRC(raw) {
     if (!raw) return '';
@@ -155,6 +155,85 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
+  function looksLikeAddress(texto) {
+    if (!texto) return false;
+    const t = texto.trim();
+    if (detectarCoordenadas(t)) return false;
+
+    // Si contiene espacios
+    if (t.includes(' ')) {
+      // Comprobar si parece una RC con espacios accidentales (ej: "40204A00 600051 0000JM")
+      const clean = cleanRC(t);
+      if ((clean.length === 14 || clean.length === 20) && /^[0-9A-Z]+$/.test(clean) && !/[a-záéíóúñ]{3,}/i.test(t)) {
+        return false;
+      }
+      return true;
+    }
+
+    // Si tiene palabras típicas de calle o vía
+    const streetKeywords = /\b(?:calle|cl|avda|avenida|plaza|pza|paseo|pso|carrer|rúa|rua|camino|ctra|carretera|gran\s*v[ií]a|c\/)\b/i;
+    if (streetKeywords.test(t)) return true;
+
+    // Si no es una RC válida y excede 20 caracteres
+    const clean = cleanRC(t);
+    if (clean.length > 20) return true;
+
+    return false;
+  }
+
+  function parseAddressAndUnit(rawText) {
+    const text = (rawText || '').trim();
+
+    const portalMatch = text.match(/\b(?:nº|num|número|no\.?)?\s*(\d+)\b/i);
+    if (!portalMatch) {
+      return { cleanAddress: text, unitInfo: null };
+    }
+
+    const portalIdx = portalMatch.index + portalMatch[0].length;
+    const afterPortal = text.substring(portalIdx);
+
+    const unitRegex = /(?:,\s*|\s+)(?:(?:esc(?:alera)?\.?\s*([a-zA-Z0-9]+))\s*,?\s*)?(?:(?:planta|piso|plt\.?)\s*)?(\d+|bajo|bj|ático|atico|sótano|sotano|entresuelo|entreplanta|ppal|principal)[ºª°]?(?:[\s\-_/]+(?:(?:puerta|pta\.?|pt\.?)\s*)?([a-zA-Z0-9]+|dcha|derecha|izq|izquierda|izda|interior|exterior|centro)\b)?/i;
+
+    const m = afterPortal.match(unitRegex);
+    if (!m) {
+      return { cleanAddress: text, unitInfo: null };
+    }
+
+    const esc = (m[1] || '').trim();
+    const pl = (m[2] || '').trim();
+    const pu = (m[3] || '').trim();
+
+    const mStart = m.index;
+    const mEnd = m.index + m[0].length;
+
+    let cleanAddr = (text.substring(0, portalIdx) + afterPortal.substring(0, mStart) + ' ' + afterPortal.substring(mEnd)).trim();
+    cleanAddr = cleanAddr.replace(/\s*,\s*,/g, ',');
+    cleanAddr = cleanAddr.replace(/\s{2,}/g, ' ');
+    cleanAddr = cleanAddr.replace(/,\s*$/, '').trim();
+
+    let plNorm = pl.toLowerCase();
+    if (plNorm === 'bajo' || plNorm === 'bj') plNorm = '00';
+    else if (plNorm === 'entresuelo' || plNorm === 'entreplanta') plNorm = 'EN';
+    else if (plNorm === 'ático' || plNorm === 'atico') plNorm = 'AT';
+    else plNorm = plNorm.replace(/^0+/, '') || '0';
+
+    let puNorm = pu.toUpperCase();
+    if (['DCHA', 'DERECHA', 'DCHO'].includes(puNorm)) puNorm = 'DR';
+    else if (['IZQ', 'IZQUIERDA', 'IZDA'].includes(puNorm)) puNorm = 'IZ';
+
+    return {
+      cleanAddress: cleanAddr,
+      unitInfo: {
+        escalera: esc.toUpperCase(),
+        planta: plNorm,
+        plantaRaw: pl,
+        puerta: puNorm,
+        puertaRaw: pu,
+        textoOriginal: m[0].trim().replace(/^,\s*/, '')
+      }
+    };
+  }
+
   rcInput.addEventListener('input', () => {
     const rawVal = rcInput.value;
     const coords = detectarCoordenadas(rawVal);
@@ -167,9 +246,23 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    if (looksLikeAddress(rawVal)) {
+      charCounter.textContent = 'Dirección postal';
+      clearBtn.style.display = rawVal.length > 0 ? 'flex' : 'none';
+      const parsed = parseAddressAndUnit(rawVal);
+      if (parsed.unitInfo) {
+        formatHint.textContent = `Dirección detectada • Piso/puerta: ${parsed.unitInfo.textoOriginal}`;
+        formatHint.style.color = 'var(--secondary-pumpkin)';
+      } else {
+        formatHint.textContent = 'Dirección postal detectada (calle, número y piso opcional)';
+        formatHint.style.color = 'var(--primary-pistacho)';
+      }
+      return;
+    }
+
     const cleanVal = cleanRC(rawVal);
-    // Solo normalizar si no parece estar escribiendo coordenadas (sin comas ni espacios decimales)
-    if (rawVal !== cleanVal && !rawVal.includes(',') && !rawVal.includes('.')) {
+    // Solo normalizar mayúsculas si no contiene comas, puntos o espacios
+    if (rawVal !== cleanVal && !rawVal.includes(',') && !rawVal.includes('.') && !rawVal.includes(' ')) {
       rcInput.value = cleanVal;
     }
 
@@ -184,10 +277,10 @@ document.addEventListener('DOMContentLoaded', () => {
       formatHint.textContent = 'Formato Inmueble Completo (20 car.) - Correcto';
       formatHint.style.color = 'var(--primary-pistacho)';
     } else if (len > 20) {
-      formatHint.textContent = 'Longitud mayor de 20 (verifica o usa coordenadas)';
+      formatHint.textContent = 'Longitud mayor de 20 (verifica o busca por dirección/coordenadas)';
       formatHint.style.color = 'var(--text-muted)';
     } else {
-      formatHint.textContent = 'Acepta Ref. Catastral o Coordenadas (lat, lon)';
+      formatHint.textContent = 'Acepta Ref. Catastral, Dirección Postal o Coordenadas (lat, lon)';
       formatHint.style.color = 'var(--text-muted)';
     }
   });
@@ -195,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
   clearBtn.addEventListener('click', () => {
     rcInput.value = '';
     charCounter.textContent = '0 caracteres';
-    formatHint.textContent = 'Acepta Ref. Catastral o Coordenadas (lat, lon)';
+    formatHint.textContent = 'Acepta Ref. Catastral, Dirección Postal o Coordenadas (lat, lon)';
     formatHint.style.color = 'var(--text-muted)';
     clearBtn.style.display = 'none';
     rcInput.focus();
@@ -209,6 +302,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const coords = detectarCoordenadas(val);
     if (coords) {
       ejecutarConsultaCoordenadas(coords.lat, coords.lon);
+      return;
+    }
+
+    if (looksLikeAddress(val)) {
+      ejecutarConsultaDireccion(val);
       return;
     }
 
@@ -282,6 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
       guardarHistorial(data);
 
       if (data.latitud && data.longitud) {
+        actualizarMapa(data.latitud, data.longitud, data, false);
         localStorage.setItem('yaluba_last_coords', JSON.stringify({
           lat: data.latitud,
           lon: data.longitud,
@@ -305,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   // 5. CONSULTA AL CATASTRO POR COORDENADAS GPS
   // ==========================================
-  async function ejecutarConsultaCoordenadas(lat, lon) {
+  async function ejecutarConsultaCoordenadas(lat, lon, desdeMapa = false) {
     if (latVal && lonVal) {
       latVal.textContent = lat.toFixed(5);
       lonVal.textContent = lon.toFixed(5);
@@ -367,11 +466,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Si la consulta vino de un clic sobre el mapa, conservamos la coordenada exacta del clic
+      // para que el pin no salte al centroide de la parcela ni desoriente al usuario.
+      const markerLat = desdeMapa ? lat : (data.latitud || lat);
+      const markerLon = desdeMapa ? lon : (data.longitud || lon);
+
       // Guardar últimas coordenadas válidas
       localStorage.setItem('yaluba_last_coords', JSON.stringify({
-        lat: data.latitud || lat,
-        lon: data.longitud || lon,
-        zoom: 18
+        lat: markerLat,
+        lon: markerLon,
+        zoom: leafletMap ? leafletMap.getZoom() : 18
       }));
 
       rcInput.value = data.referencia;
@@ -381,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       currentPropertyData = data;
       renderizarResultados(data);
-      actualizarMapa(data.latitud || lat, data.longitud || lon, data);
+      actualizarMapa(markerLat, markerLon, data, desdeMapa);
       guardarHistorial(data);
 
       // Scroll suave a los resultados en móviles
@@ -395,6 +499,208 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       setLoading(false);
     }
+  }
+
+  // ==========================================
+  // 5.1 CONSULTA AL CATASTRO POR DIRECCIÓN POSTAL
+  // ==========================================
+  async function ejecutarConsultaDireccion(direccionCompleta) {
+    const parsed = parseAddressAndUnit(direccionCompleta);
+    const cleanAddress = parsed.cleanAddress;
+    const unitInfo = parsed.unitInfo;
+
+    charCounter.textContent = 'Dirección postal';
+    formatHint.textContent = `Localizando "${cleanAddress}"...`;
+    formatHint.style.color = 'var(--secondary-pumpkin)';
+
+    setLoading(true);
+    ocultarResultados();
+    ocultarError();
+
+    try {
+      let data = null;
+
+      // 1. Intentar /api/consultar con parámetro direccion
+      try {
+        const apiRes = await fetch(`/api/consultar?direccion=${encodeURIComponent(direccionCompleta)}`);
+        if (apiRes.ok) {
+          data = await apiRes.json();
+          if (data && data.error) throw new Error(data.error);
+        }
+      } catch (errApi) {
+        console.info('API local/Pages no disponible con dirección, recurriendo a geocodificación cliente:', errApi.message);
+      }
+
+      // 2. Si no se obtuvo del backend, geocodificar en cliente (CartoCiudad IGN / Nominatim)
+      if (!data || !data.referencia) {
+        data = await consultarDireccionDirecto(direccionCompleta);
+      }
+
+      if (data.error) {
+        mostrarError(data.error);
+        return;
+      }
+
+      rcInput.value = data.referencia;
+      charCounter.textContent = `${data.referencia.length} / 20 caracteres`;
+      if (data.unidad_seleccionada) {
+        formatHint.textContent = `Piso localizado: ${data.unidad_seleccionada.ubicacion || ''}`;
+      } else {
+        formatHint.textContent = `Inmueble localizado por dirección`;
+      }
+      formatHint.style.color = 'var(--primary-pistacho)';
+
+      currentPropertyData = data;
+      renderizarResultados(data);
+      if (data.latitud && data.longitud) {
+        actualizarMapa(data.latitud, data.longitud, data);
+        localStorage.setItem('yaluba_last_coords', JSON.stringify({
+          lat: data.latitud,
+          lon: data.longitud,
+          zoom: 18
+        }));
+      }
+      guardarHistorial(data);
+
+      if (window.innerWidth < 768) {
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+    } catch (err) {
+      console.error('Error al consultar por dirección:', err);
+      mostrarError(err.message || 'No se pudo localizar la dirección indicada.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function consultarDireccionDirecto(direccionCompleta) {
+    const parsed = parseAddressAndUnit(direccionCompleta);
+    const cleanAddress = parsed.cleanAddress;
+    const unitInfo = parsed.unitInfo;
+
+    const geo = await geocodeAddressCliente(cleanAddress);
+    if (!geo) {
+      return { error: `No se pudo localizar la dirección: "${cleanAddress}". Verifica la calle, el número y el municipio.` };
+    }
+
+    let rcMatriz = geo.refCatastral;
+    if (!rcMatriz) {
+      const coordRes = await consultarCoordenadasDirecto(geo.lat, geo.lon);
+      if (coordRes.error) {
+        return { error: `Dirección situada en (${geo.lat.toFixed(5)}, ${geo.lon.toFixed(5)}), pero sin parcela catastral en este punto.` };
+      }
+      rcMatriz = coordRes.referencia;
+    }
+
+    let data = await consultarCatastroDirecto(rcMatriz);
+    if (data.error) return data;
+
+    // Si se especificó piso/puerta y el inmueble tiene división horizontal:
+    if (unitInfo && data.unidades_inmuebles && data.unidades_inmuebles.length > 0) {
+      const matched = findMatchingUnitClient(data.unidades_inmuebles, unitInfo);
+      if (matched) {
+        const fullUnitData = await consultarCatastroDirecto(matched.referencia);
+        if (!fullUnitData.error) {
+          fullUnitData.unidades_inmuebles = data.unidades_inmuebles;
+          fullUnitData.referencia_matriz = data.referencia_matriz || rcMatriz.substring(0, 14);
+          fullUnitData.unidad_seleccionada = matched;
+          data = fullUnitData;
+        }
+      }
+    }
+
+    data.direccion_busqueda = geo.address;
+    if (geo.source) data.geocodificador = geo.source;
+    if (unitInfo) data.unidad_buscada = unitInfo;
+    if (geo.lat && geo.lon) {
+      if (!data.latitud) data.latitud = geo.lat;
+      if (!data.longitud) data.longitud = geo.lon;
+    }
+
+    return data;
+  }
+
+  async function geocodeAddressCliente(address) {
+    // 1. CartoCiudad del IGN
+    try {
+      const urlCarto = `https://www.cartociudad.es/geocoder/api/geocoder/candidates?q=${encodeURIComponent(address)}&limit=1`;
+      const resp = await fetch(urlCarto);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const item = data[0];
+          const rc = (item.refCatastral && item.refCatastral.length === 14) ? item.refCatastral : null;
+          return {
+            lat: parseFloat(item.lat),
+            lon: parseFloat(item.lng),
+            refCatastral: rc,
+            address: item.address || address,
+            source: 'CartoCiudad'
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Error CartoCiudad cliente:', e);
+    }
+
+    // 2. Nominatim fallback
+    try {
+      const urlNom = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&countrycodes=es&limit=1`;
+      const resp = await fetch(urlNom, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const item = data[0];
+          return {
+            lat: parseFloat(item.lat),
+            lon: parseFloat(item.lon),
+            refCatastral: null,
+            address: item.display_name || address,
+            source: 'Nominatim'
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Error Nominatim cliente:', e);
+    }
+
+    return null;
+  }
+
+  function findMatchingUnitClient(unidades, unitInfo) {
+    if (!unitInfo || !Array.isArray(unidades) || unidades.length === 0) return null;
+    const targetPlanta = (unitInfo.planta || '').replace(/^0+/, '') || '0';
+    const targetPuerta = (unitInfo.puerta || '').trim().toUpperCase();
+    const targetEsc = (unitInfo.escalera || '').trim().toUpperCase();
+
+    for (const u of unidades) {
+      const uPlanta = (u.planta || '').trim().replace(/^0+/, '') || '0';
+      const uPuerta = (u.puerta || '').trim().toUpperCase();
+      const uEsc = (u.escalera || '').trim().toUpperCase();
+
+      const plantaMatches = (u.planta.toUpperCase() === unitInfo.planta.toUpperCase() || uPlanta === targetPlanta);
+      if (!plantaMatches) continue;
+
+      let puertaMatches = true;
+      if (targetPuerta) {
+        const uPuertaClean = uPuerta.replace(/^0+/, '');
+        const tPuertaClean = targetPuerta.replace(/^0+/, '');
+        puertaMatches = (uPuerta === targetPuerta || uPuertaClean === tPuertaClean || uPuerta.includes(targetPuerta));
+      }
+      if (!puertaMatches) continue;
+
+      let escMatches = true;
+      if (targetEsc) {
+        escMatches = (uEsc === targetEsc || uEsc.replace(/^0+/, '') === targetEsc.replace(/^0+/, ''));
+      }
+      if (!escMatches) continue;
+
+      return u;
+    }
+    return null;
   }
 
   // Geolocalización del dispositivo (móviles con chip GPS y portátiles con Wi-Fi/red)
@@ -531,16 +837,22 @@ document.addEventListener('DOMContentLoaded', () => {
           const car = getTag(item, 'car');
           const cc1 = getTag(item, 'cc1');
           const cc2 = getTag(item, 'cc2');
+          const es = getTag(item, 'es');
           const pt = getTag(item, 'pt');
           const pu = getTag(item, 'pu');
           const ldt = getTag(item, 'ldt');
           const fullRc = `${pc1}${pc2}${car}${cc1}${cc2}`.trim();
           if (fullRc) {
+            const desc = [];
+            if (es) desc.push(`Esc. ${es}`);
+            if (pt) desc.push(`Planta ${pt}`);
+            if (pu) desc.push(`Puerta ${pu}`);
             unidades.push({
               referencia: fullRc,
+              escalera: es,
               planta: pt,
               puerta: pu,
-              ubicacion: `Planta ${pt || '-'} Puerta ${pu || '-'}`.trim(),
+              ubicacion: desc.join(' - ') || 'Inmueble',
               direccion: ldt
             });
           }
@@ -796,6 +1108,15 @@ document.addEventListener('DOMContentLoaded', () => {
       btnSedeCatastro.style.display = 'flex';
     }
 
+    // Preservar unidades_inmuebles si el nuevo inmueble pertenece a la misma matriz
+    if ((!data.unidades_inmuebles || data.unidades_inmuebles.length === 0) && currentPropertyData && currentPropertyData.unidades_inmuebles && currentPropertyData.unidades_inmuebles.length > 1) {
+      const matrizActual = currentPropertyData.referencia_matriz || (currentPropertyData.referencia ? currentPropertyData.referencia.substring(0, 14) : '');
+      if (matrizActual && data.referencia && data.referencia.startsWith(matrizActual)) {
+        data.unidades_inmuebles = currentPropertyData.unidades_inmuebles;
+        data.referencia_matriz = matrizActual;
+      }
+    }
+
     // Gestión de división horizontal (múltiples unidades en el edificio)
     if (multiUnitsCard && multiUnitsSelect) {
       if (data.unidades_inmuebles && data.unidades_inmuebles.length > 1) {
@@ -803,6 +1124,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (multiUnitsBadge) {
           multiUnitsBadge.textContent = `${data.unidades_inmuebles.length} inmuebles`;
         }
+
+        const multiUnitsSub = multiUnitsCard.querySelector('.multi-units-sub');
+        if (data.unidad_seleccionada) {
+          if (multiUnitsSub) {
+            multiUnitsSub.innerHTML = `✨ <strong>Inmueble preseleccionado:</strong> ${escapeHtml(data.unidad_seleccionada.ubicacion || '')} (Ref: ${escapeHtml(data.unidad_seleccionada.referencia)}). Puedes cambiar a cualquier otro inmueble del edificio:`;
+          }
+        } else if (data.direccion_busqueda) {
+          if (multiUnitsSub) {
+            multiUnitsSub.innerHTML = `📍 <strong>Edificio localizado por dirección:</strong> ${escapeHtml(data.direccion_busqueda)}. Este edificio dispone de múltiples viviendas/locales; selecciona el tuyo a continuación:`;
+          }
+        } else {
+          if (multiUnitsSub) {
+            multiUnitsSub.textContent = 'Esta parcela o edificio cuenta con varias fincas independientes registradas. Puedes elegir una vivienda o local concreto para cargar su ficha:';
+          }
+        }
+
         let optsHtml = '';
         data.unidades_inmuebles.forEach(u => {
           const isSelected = u.referencia === data.referencia ? 'selected' : '';
@@ -832,10 +1169,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderizarDesglose(data);
 
     resultsSection.style.display = 'block';
-
-    if (data.latitud && data.longitud) {
-      actualizarMapa(data.latitud, data.longitud, data);
-    }
   }
 
   // Síntesis descriptiva
@@ -986,6 +1319,7 @@ document.addEventListener('DOMContentLoaded', () => {
       leafletMap = L.map('map', {
         center: [initialLat, initialLon],
         zoom: initialZoom,
+        maxZoom: 20,
         scrollWheelZoom: false,
         zoomControl: true
       });
@@ -996,7 +1330,8 @@ document.addEventListener('DOMContentLoaded', () => {
         format: 'image/png',
         transparent: false,
         version: '1.3.0',
-        attribution: '© IGN España - PNOA'
+        attribution: '© IGN España - PNOA',
+        maxZoom: 20
       });
 
       // Capa 2: Callejero OpenStreetMap
@@ -1011,7 +1346,8 @@ document.addEventListener('DOMContentLoaded', () => {
         format: 'image/png',
         transparent: true,
         version: '1.3.0',
-        attribution: '© D.G. del Catastro'
+        attribution: '© D.G. del Catastro',
+        maxZoom: 20
       });
 
       pnoaLayer.addTo(leafletMap);
@@ -1028,26 +1364,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
       L.control.layers(baseMaps, overlayMaps, { position: 'topright' }).addTo(leafletMap);
 
-      // Actualizar coordenadas en tiempo real al mover el ratón
+      // Actualizar coordenadas en tiempo real al mover el ratón con precisión milimétrica
       leafletMap.on('mousemove', (e) => {
         if (latVal && lonVal) {
-          latVal.textContent = e.latlng.lat.toFixed(5);
-          lonVal.textContent = e.latlng.lng.toFixed(5);
+          latVal.textContent = e.latlng.lat.toFixed(6);
+          lonVal.textContent = e.latlng.lng.toFixed(6);
         }
       });
 
-      // Interacción clave: Clic en el mapa para consultar la parcela
+      // Interacción clave: Clic en el mapa para consultar la parcela exacta
       leafletMap.on('click', (e) => {
         const clickLat = e.latlng.lat;
         const clickLon = e.latlng.lng;
         colocarPinTemporal(clickLat, clickLon);
-        ejecutarConsultaCoordenadas(clickLat, clickLon);
+        ejecutarConsultaCoordenadas(clickLat, clickLon, true);
       });
 
       // Actualizar valores iniciales de la barra de coordenadas
       if (latVal && lonVal) {
-        latVal.textContent = initialLat.toFixed(5);
-        lonVal.textContent = initialLon.toFixed(5);
+        latVal.textContent = initialLat.toFixed(6);
+        lonVal.textContent = initialLon.toFixed(6);
       }
 
       setTimeout(() => {
@@ -1059,17 +1395,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function colocarPinTemporal(lat, lon) {
-    if (!leafletMap || typeof L === 'undefined') return;
-
-    if (mapMarker) {
-      leafletMap.removeLayer(mapMarker);
-    }
-
-    const customPin = L.divIcon({
+  // Generador centralizado de icono de marcador con anclaje exacto en la punta inferior
+  function crearPinIcon() {
+    return L.divIcon({
       className: 'catastro-pin-wrap',
       html: `
-        <div style="transform: translate(-14px, -36px); width: 28px; height: 36px; cursor: pointer; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));">
+        <div style="width: 28px; height: 36px; cursor: pointer; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35)); pointer-events: auto;">
           <svg viewBox="0 0 24 36" width="28" height="36" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 24 12 24s12-15 12-24c0-6.627-5.373-12-12-12z" fill="#FF7518"/>
             <circle cx="12" cy="12" r="5" fill="#FFFFFF"/>
@@ -1080,11 +1411,20 @@ document.addEventListener('DOMContentLoaded', () => {
       iconAnchor: [14, 36],
       popupAnchor: [0, -36]
     });
+  }
 
+  function colocarPinTemporal(lat, lon) {
+    if (!leafletMap || typeof L === 'undefined') return;
+
+    if (mapMarker) {
+      leafletMap.removeLayer(mapMarker);
+    }
+
+    const customPin = crearPinIcon();
     mapMarker = L.marker([lat, lon], { icon: customPin }).addTo(leafletMap);
   }
 
-  function actualizarMapa(lat, lon, data) {
+  function actualizarMapa(lat, lon, data, keepView = false) {
     const mapElement = document.getElementById('map');
     if (!mapElement) return;
 
@@ -1092,7 +1432,7 @@ document.addEventListener('DOMContentLoaded', () => {
       mapElement.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 250px; padding: 2rem; text-align: center; background-color: var(--bg-subtle); color: var(--text-secondary); border-radius: var(--radius-md);">
           <p style="font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);">Visor Cartográfico</p>
-          <p style="font-size: 0.88rem; margin-bottom: 1rem;">Coordenadas: ${lat.toFixed(5)}, ${lon.toFixed(5)}</p>
+          <p style="font-size: 0.88rem; margin-bottom: 1rem;">Coordenadas: ${lat.toFixed(6)}, ${lon.toFixed(6)}</p>
           <a href="${data.google_maps_url}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.5rem; background-color: var(--secondary-pumpkin); color: #fff; padding: 0.6rem 1.2rem; border-radius: var(--radius-sm); font-weight: 700; font-size: 0.85rem; text-decoration: none;">
             Abrir ubicación en Google Maps &rarr;
           </a>
@@ -1106,32 +1446,23 @@ document.addEventListener('DOMContentLoaded', () => {
         initLeafletMap();
       }
 
-      leafletMap.setView([lat, lon], 18);
+      if (!keepView) {
+        const currentZoom = leafletMap.getZoom();
+        const targetZoom = Math.max(currentZoom || 18, 18);
+        leafletMap.setView([lat, lon], targetZoom);
+      }
 
       if (mapMarker) {
         leafletMap.removeLayer(mapMarker);
       }
 
-      const customPin = L.divIcon({
-        className: 'catastro-pin-wrap',
-        html: `
-          <div style="transform: translate(-14px, -36px); width: 28px; height: 36px; cursor: pointer; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));">
-            <svg viewBox="0 0 24 36" width="28" height="36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 24 12 24s12-15 12-24c0-6.627-5.373-12-12-12z" fill="#FF7518"/>
-              <circle cx="12" cy="12" r="5" fill="#FFFFFF"/>
-            </svg>
-          </div>
-        `,
-        iconSize: [28, 36],
-        iconAnchor: [14, 36],
-        popupAnchor: [0, -36]
-      });
+      const customPin = crearPinIcon();
 
       const popupHtml = `
         <div style="font-family: var(--font-sans); font-size: 0.85rem; line-height: 1.4; color: #1E293B;">
           <strong style="color: #7DA92E; font-size: 0.95rem;">${escapeHtml(data.referencia)}</strong><br>
           <strong>${escapeHtml(data.direccion)}</strong><br>
-          <span>${escapeHtml(data.poblacion)} (${escapeHtml(data.provincia)})</span><br>
+          <span>${escapeHtml(data.poblacion || '')} (${escapeHtml(data.provincia || '')})</span><br>
           <span>Superficie: <strong>${data.tamano_m2 ? data.tamano_m2.toLocaleString('es-ES') : '-'} m²</strong></span><br>
           <div style="margin-top: 0.5rem;">
             <a href="${data.google_maps_url}" target="_blank" rel="noopener noreferrer" style="color: #FF7518; font-weight: 700; text-decoration: underline;">
@@ -1144,8 +1475,8 @@ document.addEventListener('DOMContentLoaded', () => {
       mapMarker = L.marker([lat, lon], { icon: customPin }).addTo(leafletMap).bindPopup(popupHtml);
 
       if (latVal && lonVal) {
-        latVal.textContent = lat.toFixed(5);
-        lonVal.textContent = lon.toFixed(5);
+        latVal.textContent = lat.toFixed(6);
+        lonVal.textContent = lon.toFixed(6);
       }
 
       setTimeout(() => {
