@@ -14,6 +14,9 @@ Aplicación web para la consulta de referencias catastrales en España, visualiz
   * Optimizado para **smartphones**, **tablets** y **ordenadores de escritorio**.
   * Zonas táctiles amplias (mínimo 44–48 px) para una pulsación cómoda con los dedos.
   * Prevención de auto-zoom en iOS Safari y adaptación automática de rejillas para pantallas estrechas.
+* **Búsqueda Multimodal Inteligente (Referencia, Dirección Postal o Coordenadas GPS)**:
+  * Admite **Referencia Catastral** (14 o 20 caracteres), **Coordenadas GPS** (lat, lon en decimal o enlace de Google Maps) o **Dirección Postal en lenguaje natural** (ej. `Calle Atocha 28, 4º B, Madrid`).
+  * **Resolución de División Horizontal**: En edificios con pisos o locales, geocodifica el portal con **CartoCiudad (IGN)** / Nominatim, consulta la parcela matriz y empareja automáticamente el piso/puerta solicitado (ej. `4º B`), mostrando además el selector con todas las fincas del edificio.
 * **Consulta Completa de Datos Catastrales**:
   * Distinción clara entre **Rústico** (parcelas, superficies de terreno, desglose de cultivos/subparcelas) y **Urbano** (superficie construida, año de construcción, división horizontal, reparto de locales/plantas/puertas).
   * **Síntesis Descriptiva Inteligente**: Generación de un resumen profesional y claro de la propiedad (compatible de forma nativa con **Cloudflare Workers AI**).
