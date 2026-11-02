@@ -169,3 +169,5 @@ uv.toml
 .DS_Store
 Thumbs.db
 
+# Own
+src/
